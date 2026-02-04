@@ -1,85 +1,187 @@
 'use client';
 
-import { useState } from 'react';
-import { useParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { 
-  VideoPlayer, 
-  CodeEditor,
-  ProgressTracker 
-} from '@/components/learning';
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { VideoPlayer } from '@/components/learning/video-player';
+import { CodeEditor } from '@/components/learning/code-editor';
+import { ProgressTracker } from '@/components/learning/progress-tracker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Play,
+  // Play,
   BookOpen,
   Code2,
   MessageSquare,
-  Download,
-  Bookmark,
   ChevronLeft,
   ChevronRight,
   CheckCircle2
 } from 'lucide-react';
+import { coursesApi } from '@/lib/api/courses';
+import { lessonsApi } from '@/lib/api/lessons';
+import { progressApi } from '@/lib/api/progress';
+import { commentsApi } from '@/lib/api/comments';
+import { exercisesApi } from '@/lib/api/exercises';
+import { useAuthStore } from '@/stores/authStore';
+import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 export default function LearningPage() {
   const { courseId, lessonId } = useParams();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'content' | 'exercise' | 'comments'>('content');
-  const [code, setCode] = useState<string>('// Votre code ici\nconsole.log("Bonjour, CodeMaster!");');
+  // const [code, setCode] = useState<string>('// Votre code ici\nconsole.log("Bonjour, CodeMaster!");');
+  const { isAuthenticated } = useAuthStore();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: course } = useQuery({
     queryKey: ['course', courseId],
-    queryFn: () => ({ id: courseId, title: 'JavaScript Avancé' }),
+    queryFn: () => coursesApi.getByIdOrSlug(courseId as string),
     enabled: !!courseId,
   });
 
   const { data: lesson } = useQuery({
     queryKey: ['lesson', lessonId],
-    queryFn: () => ({
-      id: lessonId,
-      title: 'Les Promises et async/await',
-      content: '# Les Promises et async/await\n\nLes Promises sont une fonctionnalité essentielle de JavaScript moderne pour gérer les opérations asynchrones.',
-      videoUrl: 'https://example.com/video.mp4',
-      duration: 45,
-    }),
+    queryFn: () => lessonsApi.getByIdOrSlug(lessonId as string),
     enabled: !!lessonId,
   });
 
-  const modules = [
-    {
-      id: '1',
-      title: 'Introduction à JavaScript',
-      lessons: [
-        { id: '1', title: 'Variables et types', duration: 30, completed: true, type: 'video' },
-        { id: '2', title: 'Fonctions', duration: 45, completed: true, type: 'video' },
-        { id: '3', title: 'Exercice: Calculatrice', duration: 60, completed: true, type: 'exercise' },
-      ],
+  const { data: courseProgress } = useQuery({
+    queryKey: ['course-progress', courseId],
+    queryFn: () => progressApi.getCourseProgress(courseId as string),
+    enabled: !!courseId && isAuthenticated,
+  });
+
+  const { data: lessonProgress } = useQuery({
+    queryKey: ['lesson-progress', lessonId],
+    queryFn: () => progressApi.getLessonProgress(lessonId as string),
+    enabled: !!lessonId && isAuthenticated,
+  });
+
+  const { data: comments } = useQuery({
+    queryKey: ['comments', lessonId],
+    queryFn: () => commentsApi.getByLesson(lessonId as string),
+    enabled: !!lessonId && activeTab === 'comments',
+  });
+
+  const { data: exercise } = useQuery({
+    queryKey: ['exercise', lessonId],
+    queryFn: () => exercisesApi.getByLesson(lessonId as string),
+    enabled: !!lessonId && activeTab === 'exercise',
+  });
+
+  const completeLessonMutation = useMutation({
+    mutationFn: () => lessonsApi.markAsCompleted(lessonId as string),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lesson-progress', lessonId] });
+      queryClient.invalidateQueries({ queryKey: ['course-progress', courseId] });
+      toast({
+        title: 'Leçon terminée !',
+        description: 'Vous avez terminé cette leçon avec succès',
+      });
     },
-    {
-      id: '2',
-      title: 'Programmation asynchrone',
-      lessons: [
-        { id: '4', title: 'Callback et événements', duration: 40, completed: true, type: 'video' },
-        { id: '5', title: 'Les Promises', duration: 45, completed: false, type: 'video', current: true },
-        { id: '6', title: 'Exercice: Gestion des erreurs', duration: 50, completed: false, type: 'exercise', locked: true },
-        { id: '7', title: 'async/await', duration: 35, completed: false, type: 'video', locked: true },
-      ],
+  });
+
+  const updateProgressMutation = useMutation({
+    mutationFn: (position: number) => lessonsApi.updateVideoPosition(lessonId as string, position),
+  });
+
+  const submitExerciseMutation = useMutation({
+    mutationFn: (code: string) => exercisesApi.submit(exercise?.id!, { code, language: 'JAVASCRIPT' }),
+    onSuccess: (data) => {
+      toast({
+        title: data.status === 'SUCCESS' ? 'Exercice réussi !' : 'Exercice échoué',
+        description: data.status === 'SUCCESS' 
+          ? `Vous avez passé ${data.passedTests}/${data.totalTests} tests`
+          : 'Veuillez réessayer',
+      });
     },
-  ];
+  });
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+
+    if (!courseId || !lessonId) {
+      router.push('/dashboard');
+      return;
+    }
+  }, [isAuthenticated, courseId, lessonId, router]);
 
   const handleRunCode = async (code: string) => {
-    console.log('Running code:', code);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return { success: true, output: 'Bonjour, CodeMaster!' };
+    try {
+      const result = await submitExerciseMutation.mutateAsync(code);
+      return { success: result.status === 'SUCCESS', output: result.result || 'Aucun résultat' };
+    } catch (error: any) {
+      return { success: false, output: error.message || 'Une erreur est survenue' };
+    }
   };
 
-  const handleCompleteLesson = () => {
-    // Mark lesson as completed
-    console.log('Lesson completed');
+  const handleCompleteLesson = async () => {
+    if (!lessonId) return;
+    
+    try {
+      await completeLessonMutation.mutateAsync();
+    } catch (error) {
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de marquer la leçon comme terminée',
+        variant: 'destructive',
+      });
+    }
   };
+
+  const handleVideoProgress = async (position: number) => {
+    if (!lessonId) return;
+    
+    try {
+      await updateProgressMutation.mutateAsync(position);
+    } catch (error) {
+      console.error('Failed to update video position:', error);
+    }
+  };
+
+  const modules = course?.modules?.map(module => {
+    const moduleProgress = courseProgress?.modules?.find(m => m.id === module.id);
+    
+    return {
+      ...module,
+      lessons: module.lessons?.map(lesson => {
+        const lessonProgress = moduleProgress?.lessons?.find(l => l.id === lesson.id);
+        
+        return {
+          ...lesson,
+          completed: lessonProgress?.completed || false,
+          current: lesson.id === lessonId,
+          locked: false,
+        };
+      }) || [],
+      progress: moduleProgress?.progress || 0,
+    };
+  }) || [];
+
+  const currentModuleIndex = modules.findIndex(m => 
+    m.lessons?.some(l => l.id === lessonId)
+  );
+  const currentLessonIndex = modules[currentModuleIndex]?.lessons?.findIndex(l => l.id === lessonId) || 0;
+
+  const nextLesson = modules[currentModuleIndex]?.lessons?.[currentLessonIndex + 1] || 
+                    modules[currentModuleIndex + 1]?.lessons?.[0];
+  const prevLesson = modules[currentModuleIndex]?.lessons?.[currentLessonIndex - 1] || 
+                    modules[currentModuleIndex - 1]?.lessons?.slice(-1)[0];
+
+  if (!course || !lesson) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-lg">Chargement...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/10">
@@ -88,32 +190,31 @@ export default function LearningPage() {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between py-4">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm">
-                <ChevronLeft className="mr-2 h-4 w-4" />
-                Retour au cours
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={`/courses/${course.slug}`}>
+                  <ChevronLeft className="mr-2 h-4 w-4" />
+                  Retour au cours
+                </Link>
               </Button>
               <div>
                 <h1 className="font-heading text-xl font-bold">
-                  {course?.title}
+                  {course.title}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  {lesson?.title} • {lesson?.duration} minutes
+                  {lesson.title} • {lesson.duration} minutes
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
-                <Bookmark className="mr-2 h-4 w-4" />
-                Sauvegarder
-              </Button>
-              <Button variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                Télécharger
-              </Button>
-              <Button onClick={handleCompleteLesson}>
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Terminer la leçon
-              </Button>
+              {!lessonProgress?.completed && (
+                <Button 
+                  onClick={handleCompleteLesson}
+                  disabled={completeLessonMutation.isPending}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  {completeLessonMutation.isPending ? 'En cours...' : 'Terminer la leçon'}
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -128,7 +229,7 @@ export default function LearningPage() {
               <ProgressTracker
                 modules={modules}
                 currentLessonId={lessonId as string}
-                onLessonSelect={(id) => console.log('Select lesson:', id)}
+                onLessonSelect={(id: string) => router.push(`/learning/${courseId}/${id}`)}
               />
             </div>
           </div>
@@ -141,10 +242,12 @@ export default function LearningPage() {
                   <BookOpen className="mr-2 h-4 w-4" />
                   Contenu
                 </TabsTrigger>
-                <TabsTrigger value="exercise">
-                  <Code2 className="mr-2 h-4 w-4" />
-                  Exercice
-                </TabsTrigger>
+                {exercise && (
+                  <TabsTrigger value="exercise">
+                    <Code2 className="mr-2 h-4 w-4" />
+                    Exercice
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="comments">
                   <MessageSquare className="mr-2 h-4 w-4" />
                   Discussions
@@ -158,8 +261,10 @@ export default function LearningPage() {
                     <CardContent className="p-0">
                       <VideoPlayer
                         src={lesson.videoUrl}
-                        onProgress={(time) => console.log('Progress:', time)}
+                        title={lesson.title}
+                        onProgress={handleVideoProgress}
                         onComplete={handleCompleteLesson}
+                        startAt={lessonProgress?.lastPosition || 0}
                       />
                     </CardContent>
                   </Card>
@@ -175,109 +280,38 @@ export default function LearningPage() {
                       </Badge>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="prose max-w-none">
-                    <div className="border rounded-lg p-6 bg-muted/50">
-                      <h2 className="text-2xl font-bold mb-4">📚 Aperçu de la leçon</h2>
-                      <p>Dans cette leçon, vous apprendrez à utiliser les Promises et async/await pour gérer les opérations asynchrones de manière efficace.</p>
-                    </div>
-                    
-                    <h3>Les Promises</h3>
-                    <p>Une Promise représente la complétion (ou échec) éventuelle d'une opération asynchrone et sa valeur résultante.</p>
-                    
-                    <div className="bg-secondary rounded-lg p-4 my-4 overflow-x-auto">
-                      <pre><code>{`// Exemple de Promise
-const promise = new Promise((resolve, reject) => {
-  setTimeout(() => {
-    resolve('Succès !');
-  }, 1000);
-});
-
-promise.then(result => {
-  console.log(result); // "Succès !"
-});`}</code></pre>
-                    </div>
-
-                    <h3>async/await</h3>
-                    <p>Les mots-clés async et await permettent d'écrire du code asynchrone de manière plus lisible, ressemblant à du code synchrone.</p>
-
-                    <div className="bg-secondary rounded-lg p-4 my-4 overflow-x-auto">
-                      <pre><code>{`// Exemple avec async/await
-async function fetchData() {
-  try {
-    const response = await fetch('https://api.example.com/data');
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Erreur:', error);
-  }
-}`}</code></pre>
-                    </div>
-
-                    <div className="border-t pt-6 mt-8">
-                      <h3 className="text-lg font-semibold mb-4">Résumé</h3>
-                      <ul className="space-y-2">
-                        <li className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          <span>Les Promises simplifient la gestion des callbacks</span>
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          <span>async/await rend le code asynchrone plus lisible</span>
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          <span>Gestion d'erreurs améliorée avec try/catch</span>
-                        </li>
-                      </ul>
-                    </div>
+                  <CardContent>
+                    <div 
+                      className="prose max-w-none" 
+                      dangerouslySetInnerHTML={{ __html: lesson.content }} 
+                    />
                   </CardContent>
                 </Card>
               </TabsContent>
 
-              <TabsContent value="exercise">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Exercice pratique</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Instructions</h3>
-                      <p>
-                        Écrivez une fonction <code>fetchUserData</code> qui simule la récupération
-                        de données utilisateur depuis une API. La fonction doit :
-                      </p>
-                      <ol className="list-decimal pl-6 space-y-2">
-                        <li>Retourner une Promise</li>
-                        <li>Simuler un délai de 2 secondes</li>
-                        <li>Retourner un objet utilisateur avec id, name et email</li>
-                        <li>Gérer les erreurs si le paramètre <code>userId</code> est invalide</li>
-                      </ol>
-                    </div>
-
-                    <div className="h-[400px] border rounded-lg overflow-hidden">
-                      <CodeEditor
-                        language="javascript"
-                        defaultValue={code}
-                        onRun={handleRunCode}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <Button variant="outline">
-                        Voir la solution
-                      </Button>
-                      <div className="flex gap-2">
-                        <Button variant="outline">
-                          Réinitialiser
-                        </Button>
-                        <Button>
-                          Soumettre
-                        </Button>
+              {exercise && (
+                <TabsContent value="exercise">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Exercice pratique</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold">Instructions</h3>
+                        <div dangerouslySetInnerHTML={{ __html: exercise.instructions }} />
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+
+                      <div className="h-[400px] border rounded-lg overflow-hidden">
+                        <CodeEditor
+                          language={exercise.language.toLowerCase() as any}
+                          defaultValue={exercise.starterCode}
+                          onRun={handleRunCode}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
 
               <TabsContent value="comments">
                 <Card>
@@ -286,46 +320,28 @@ async function fetchData() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div className="flex gap-4">
-                        <div className="flex-1">
-                          <textarea
-                            placeholder="Poser une question ou partager un commentaire..."
-                            className="w-full min-h-[100px] rounded-lg border p-3"
-                          />
-                          <div className="flex justify-end mt-2">
-                            <Button>Publier</Button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="border rounded-lg p-4">
-                            <div className="flex items-start gap-3">
-                              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                <span className="font-medium">U{i}</span>
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div>
-                                    <span className="font-medium">Utilisateur {i}</span>
-                                    <span className="text-sm text-muted-foreground ml-2">
-                                      Il y a {i} heure{i > 1 ? 's' : ''}
-                                    </span>
-                                  </div>
-                                  <Button variant="ghost" size="sm">
-                                    Répondre
-                                  </Button>
+                      {comments?.data.map((comment) => (
+                        <div key={comment.id} className="border rounded-lg p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                              <span className="font-medium">
+                                {comment.user?.username?.slice(0, 2).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <span className="font-medium">{comment.user?.username}</span>
+                                  <span className="text-sm text-muted-foreground ml-2">
+                                    {new Date(comment.createdAt).toLocaleDateString()}
+                                  </span>
                                 </div>
-                                <p>
-                                  Excellent cours ! J'ai particulièrement apprécié la section sur les Promises.
-                                  Auriez-vous des ressources supplémentaires à recommander ?
-                                </p>
                               </div>
+                              <p>{comment.content}</p>
                             </div>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
@@ -338,61 +354,31 @@ async function fetchData() {
             <div className="sticky top-24 space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Ressources</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Download className="mr-2 h-4 w-4" />
-                    Slides de présentation
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    Documentation officielle
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Code2 className="mr-2 h-4 w-4" />
-                    Code source des exemples
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Prochaine leçon</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
-                        <Play className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <div className="font-medium">Exercice: Gestion des erreurs</div>
-                        <div className="text-sm text-muted-foreground">
-                          50 minutes • Exercice
-                        </div>
-                      </div>
-                    </div>
-                    <Button className="w-full mt-2" disabled>
-                      Débloquer en terminant cette leçon
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
                   <CardTitle>Navigation</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1">
-                      <ChevronLeft className="mr-2 h-4 w-4" />
-                      Précédent
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      asChild
+                      disabled={!prevLesson}
+                    >
+                      <Link href={prevLesson ? `/learning/${courseId}/${prevLesson.id}` : '#'}>
+                        <ChevronLeft className="mr-2 h-4 w-4" />
+                        Précédent
+                      </Link>
                     </Button>
-                    <Button variant="outline" className="flex-1" disabled>
-                      Suivant
-                      <ChevronRight className="ml-2 h-4 w-4" />
+                    <Button 
+                      variant="outline" 
+                      className="flex-1" 
+                      asChild
+                      disabled={!nextLesson}
+                    >
+                      <Link href={nextLesson ? `/learning/${courseId}/${nextLesson.id}` : '#'}>
+                        Suivant
+                        <ChevronRight className="ml-2 h-4 w-4" />
+                      </Link>
                     </Button>
                   </div>
                 </CardContent>

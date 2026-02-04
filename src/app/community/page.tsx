@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,96 +21,47 @@ import {
   Filter,
   Search
 } from 'lucide-react';
+import { communityApi } from '@/lib/api/community';
+import { useAuthStore } from '@/stores/authStore';
+import { formatDate } from '@/lib/utils';
 
 export default function CommunityPage() {
   const [activeTab, setActiveTab] = useState('popular');
   const [searchQuery, setSearchQuery] = useState('');
+  const { user } = useAuthStore();
 
-  const categories = [
-    { id: 'general', name: 'Général', count: 1245 },
-    { id: 'javascript', name: 'JavaScript', count: 892 },
-    { id: 'react', name: 'React', count: 756 },
-    { id: 'python', name: 'Python', count: 543 },
-    { id: 'backend', name: 'Backend', count: 432 },
-    { id: 'career', name: 'Carrière', count: 321 },
-  ];
+  const { data: categories } = useQuery({
+    queryKey: ['community-categories'],
+    queryFn: () => communityApi.getCategories(),
+  });
 
-  const discussions = [
-    {
-      id: 1,
-      title: 'Quelle est la meilleure façon d\'apprendre React en 2024 ?',
-      author: { name: 'Alexandre Dupont', avatar: null, role: 'Senior Dev' },
-      category: 'react',
-      replies: 42,
-      likes: 156,
-      views: 1243,
-      time: 'Il y a 2 heures',
-      isPinned: true,
-      isSolved: true,
-    },
-    {
-      id: 2,
-      title: 'Problème avec les Promises imbriquées en JavaScript',
-      author: { name: 'Marie Laurent', avatar: null, role: 'Étudiante' },
-      category: 'javascript',
-      replies: 18,
-      likes: 89,
-      views: 543,
-      time: 'Il y a 5 heures',
-      isPinned: false,
-      isSolved: false,
-    },
-    {
-      id: 3,
-      title: 'Conseils pour une architecture Node.js scalable',
-      author: { name: 'Thomas Martin', avatar: null, role: 'Architect' },
-      category: 'backend',
-      replies: 31,
-      likes: 124,
-      views: 876,
-      time: 'Il y a 1 jour',
-      isPinned: true,
-      isSolved: true,
-    },
-    {
-      id: 4,
-      title: 'Différence entre useEffect et useMemo ?',
-      author: { name: 'Sophie Bernard', avatar: null, role: 'Frontend Dev' },
-      category: 'react',
-      replies: 27,
-      likes: 98,
-      views: 654,
-      time: 'Il y a 2 jours',
-      isPinned: false,
-      isSolved: true,
-    },
-    {
-      id: 5,
-      title: 'Quel framework backend choisir pour un projet personnel ?',
-      author: { name: 'Lucas Petit', avatar: null, role: 'Débutant' },
-      category: 'general',
-      replies: 56,
-      likes: 167,
-      views: 1432,
-      time: 'Il y a 3 jours',
-      isPinned: false,
-      isSolved: false,
-    },
-  ];
+  const { data: discussions } = useQuery({
+    queryKey: ['discussions', activeTab, searchQuery],
+    queryFn: () => communityApi.getDiscussions({
+      sortBy: activeTab === 'popular' ? 'votes' : 'createdAt',
+      search: searchQuery || undefined,
+    }),
+  });
 
-  const topContributors = [
-    { id: 1, name: 'Jean Tech', answers: 324, likes: 1245, avatar: null },
-    { id: 2, name: 'Marie Code', answers: 287, likes: 987, avatar: null },
-    { id: 3, name: 'Pierre Dev', answers: 243, likes: 876, avatar: null },
-    { id: 4, name: 'Sarah Prog', answers: 198, likes: 765, avatar: null },
-    { id: 5, name: 'Thomas Script', answers: 167, likes: 654, avatar: null },
-  ];
+  const { data: topContributors } = useQuery({
+    queryKey: ['top-contributors'],
+    queryFn: () => communityApi.getTopContributors(),
+  });
 
-  const upcomingEvents = [
-    { id: 1, title: 'Workshop Next.js 14', date: '15 Mars', time: '18:00', participants: 45 },
-    { id: 2, title: 'Live Q&A TypeScript', date: '18 Mars', time: '20:00', participants: 32 },
-    { id: 3, title: 'Challenge Algorithmique', date: '22 Mars', time: '19:00', participants: 67 },
-  ];
+  const { data: upcomingEvents } = useQuery({
+    queryKey: ['upcoming-events'],
+    queryFn: () => communityApi.getUpcomingEvents(),
+  });
+
+  const { data: communityStats } = useQuery({
+    queryKey: ['community-stats'],
+    queryFn: () => communityApi.getStats(),
+  });
+
+  const handleVote = async (discussionId: string) => {
+    if (!user) return;
+    await communityApi.voteDiscussion(discussionId);
+  };
 
   return (
     <div className="min-h-screen">
@@ -157,14 +109,14 @@ export default function CommunityPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {categories.map((category) => (
+                  {categories?.map((category) => (
                     <Button
                       key={category.id}
                       variant="ghost"
                       className="w-full justify-between"
                     >
                       <span>{category.name}</span>
-                      <Badge variant="secondary">{category.count}</Badge>
+                      <Badge variant="secondary">{category.discussionCount}</Badge>
                     </Button>
                   ))}
                 </div>
@@ -184,24 +136,25 @@ export default function CommunityPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {topContributors.map((contributor, index) => (
+                  {topContributors?.slice(0, 5).map((contributor, index) => (
                     <div key={contributor.id} className="flex items-center gap-3">
                       <div className="text-lg font-bold text-muted-foreground w-6">
                         {index + 1}
                       </div>
                       <Avatar className="h-10 w-10">
+                        <AvatarImage src={contributor.avatar} />
                         <AvatarFallback>
-                          {contributor.name.split(' ').map(n => n[0]).join('')}
+                          {contributor.username.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <div className="font-medium">{contributor.name}</div>
+                        <div className="font-medium">{contributor.username}</div>
                         <div className="text-xs text-muted-foreground">
-                          {contributor.answers} réponses
+                          {contributor.answerCount} réponses
                         </div>
                       </div>
                       <Badge variant="outline">
-                        {contributor.likes} 👍
+                        {contributor.likeCount} 👍
                       </Badge>
                     </div>
                   ))}
@@ -220,19 +173,19 @@ export default function CommunityPage() {
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Membres</span>
-                  <span className="font-bold">12,458</span>
+                  <span className="font-bold">{communityStats?.totalMembers?.toLocaleString() || '0'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Discussions</span>
-                  <span className="font-bold">5,234</span>
+                  <span className="font-bold">{communityStats?.totalDiscussions?.toLocaleString() || '0'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Réponses</span>
-                  <span className="font-bold">23,456</span>
+                  <span className="font-bold">{communityStats?.totalAnswers?.toLocaleString() || '0'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Taux de résolution</span>
-                  <span className="font-bold text-green-500">92%</span>
+                  <span className="font-bold text-green-500">{communityStats?.resolutionRate || 0}%</span>
                 </div>
               </CardContent>
             </Card>
@@ -263,22 +216,22 @@ export default function CommunityPage() {
 
               <TabsContent value="popular" className="space-y-4">
                 <div className="space-y-4">
-                  {discussions.map((discussion) => (
+                  {discussions?.data?.map((discussion) => (
                     <Card key={discussion.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="p-6">
                         <div className="flex gap-4">
                           {/* Stats */}
                           <div className="flex flex-col items-center gap-2 w-16">
                             <div className="text-center">
-                              <div className="text-lg font-bold">{discussion.likes}</div>
+                              <div className="text-lg font-bold">{discussion.voteCount}</div>
                               <div className="text-xs text-muted-foreground">votes</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-lg font-bold">{discussion.replies}</div>
+                              <div className="text-lg font-bold">{discussion.answerCount}</div>
                               <div className="text-xs text-muted-foreground">réponses</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-sm">{discussion.views}</div>
+                              <div className="text-sm">{discussion.viewCount}</div>
                               <div className="text-xs text-muted-foreground">vues</div>
                             </div>
                           </div>
@@ -297,15 +250,19 @@ export default function CommunityPage() {
                                   )}
                                 </h3>
                                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                  <Badge variant="outline">{discussion.category}</Badge>
-                                  <span>Posté par {discussion.author.name}</span>
-                                  <span>{discussion.time}</span>
+                                  <Badge variant="outline">{discussion.category?.name}</Badge>
+                                  <span>Posté par {discussion.author?.username}</span>
+                                  <span>{formatDate(discussion.createdAt)}</span>
                                 </div>
                               </div>
                             </div>
 
                             <div className="flex items-center gap-4 mt-4">
-                              <Button variant="ghost" size="sm">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleVote(discussion.id)}
+                              >
                                 <Heart className="h-4 w-4 mr-1" />
                                 Voter
                               </Button>
@@ -328,14 +285,14 @@ export default function CommunityPage() {
 
               <TabsContent value="events">
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {upcomingEvents.map((event) => (
+                  {upcomingEvents?.map((event) => (
                     <Card key={event.id} className="hover:shadow-md transition-shadow">
                       <CardHeader>
                         <CardTitle>{event.title}</CardTitle>
                         <CardDescription>
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />
-                            <span>{event.date} à {event.time}</span>
+                            <span>{formatDate(event.startDate)} à {event.startTime}</span>
                           </div>
                         </CardDescription>
                       </CardHeader>
@@ -343,7 +300,7 @@ export default function CommunityPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Users className="h-4 w-4" />
-                            <span>{event.participants} participants</span>
+                            <span>{event.participantCount} participants</span>
                           </div>
                           <Button size="sm">Rejoindre</Button>
                         </div>
@@ -353,57 +310,6 @@ export default function CommunityPage() {
                 </div>
               </TabsContent>
             </Tabs>
-
-            {/* Quick Start Guide */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Guide de la communauté
-                </CardTitle>
-                <CardDescription>
-                  Comment participer efficacement
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <h4 className="font-semibold">Pour poser une question :</h4>
-                    <ul className="space-y-2 text-sm text-muted-foreground">
-                      <li className="flex items-start gap-2">
-                        <div className="h-2 w-2 rounded-full bg-primary mt-1.5" />
-                        <span>Recherchez d'abord si la question a déjà été posée</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <div className="h-2 w-2 rounded-full bg-primary mt-1.5" />
-                        <span>Utilisez un titre clair et descriptif</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <div className="h-2 w-2 rounded-full bg-primary mt-1.5" />
-                        <span>Incluez votre code et les erreurs rencontrées</span>
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="space-y-3">
-                    <h4 className="font-semibold">Pour répondre :</h4>
-                    <ul className="space-y-2 text-sm text-muted-foreground">
-                      <li className="flex items-start gap-2">
-                        <div className="h-2 w-2 rounded-full bg-primary mt-1.5" />
-                        <span>Soyez respectueux et constructif</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <div className="h-2 w-2 rounded-full bg-primary mt-1.5" />
-                        <span>Fournissez des exemples de code clairs</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <div className="h-2 w-2 rounded-full bg-primary mt-1.5" />
-                        <span>Expliquez votre raisonnement</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </div>

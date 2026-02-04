@@ -3,13 +3,32 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { Clock, Users, Star, BookOpen } from 'lucide-react';
-import type { Course } from '@/types';
 import { cn, formatDuration } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 
+// Interface simplifiée pour CourseCard
+interface CourseCardCourse {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  shortDescription?: string;
+  thumbnail?: string;
+  difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  duration: number;
+  instructor?: {
+    username: string;
+    avatar?: string;
+  };
+  tags?: Array<{ id: string; name: string }>;
+  totalStudents: number;
+  rating: number;
+  isFeatured?: boolean;
+}
+
 interface CourseCardProps {
-  course: Course;
+  course: CourseCardCourse;
   variant?: 'default' | 'compact' | 'featured';
   showProgress?: boolean;
   progress?: number;
@@ -30,6 +49,16 @@ export function CourseCard({
   const isCompact = variant === 'compact';
   const isFeatured = variant === 'featured';
 
+  // Fonction pour générer l'URL de la miniature
+  const getThumbnailUrl = (thumbnail?: string) => {
+    if (!thumbnail) return undefined;
+    if (thumbnail.startsWith('http')) return thumbnail;
+    if (thumbnail.startsWith('/')) return `/api/images${thumbnail}`;
+    return `/api/images/${thumbnail}`;
+  };
+
+  const thumbnailUrl = getThumbnailUrl(course.thumbnail);
+
   return (
     <Link href={`/courses/${course.slug}`}>
       <article
@@ -48,12 +77,13 @@ export function CourseCard({
             isFeatured && 'md:w-2/5 md:h-full'
           )}
         >
-          {course.thumbnail ? (
+          {thumbnailUrl ? (
             <Image
-              src={course.thumbnail}
+              src={thumbnailUrl}
               alt={course.title}
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             />
           ) : (
             <div className="flex h-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">

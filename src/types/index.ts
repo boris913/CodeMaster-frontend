@@ -4,6 +4,13 @@ export type Role = 'STUDENT' | 'INSTRUCTOR' | 'ADMIN';
 export type VideoType = 'YOUTUBE' | 'VIMEO' | 'UPLOADED';
 export type SubmissionStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'TIMEOUT' | 'ERROR';
 
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -18,6 +25,24 @@ export interface User {
   lastLogin?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Lesson {
+  id: string;
+  title: string;
+  slug: string;
+  duration: number;
+  order: number;
+  isFree?: boolean;
+}
+
+export interface Module {
+  id: string;
+  title: string;
+  description?: string;
+  order?: number;
+  duration?: number;
+  lessons?: Lesson[];
 }
 
 export interface Course {
@@ -41,42 +66,10 @@ export interface Course {
     avatar?: string;
   };
   tags: Array<{ id: string; name: string }>;
-  modules: Array<{
-    id: string;
-    title: string;
-    lessons: Array<{ id: string }>;
-  }>;
-  enrollments: Array<{ id: string }>;
+  modules?: Module[];
   totalLessons: number;
-  totalEnrollments: number;
   rating: number;
   totalStudents: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Module {
-  id: string;
-  title: string;
-  description?: string;
-  order: number;
-  duration: number;
-  courseId: string;
-  lessons?: Lesson[];
-}
-
-export interface Lesson {
-  id: string;
-  title: string;
-  slug: string;
-  content: string;
-  videoUrl?: string;
-  videoType?: VideoType;
-  duration: number;
-  order: number;
-  isFree: boolean;
-  moduleId: string;
-  views: number;
   createdAt: string;
   updatedAt: string;
 }

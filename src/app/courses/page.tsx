@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CourseCard } from '@/components/course/course-card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { coursesApi, type CourseFilters } from '@/lib/api/courses';
 import { Difficulty } from '@/types';
 import { Search, Filter, Grid3x3, List } from 'lucide-react';
+import { useDebounce } from '@/hooks/use-debounce';
 
 export default function CoursesPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -28,19 +29,30 @@ export default function CoursesPage() {
   });
   const [search, setSearch] = useState('');
   const [difficulty, setDifficulty] = useState<string>('all');
+  const [category, setCategory] = useState<string>('all');
+  
+  const debouncedSearch = useDebounce(search, 500);
 
   const { data: coursesData, isLoading } = useQuery({
-    queryKey: ['courses', filters],
-    queryFn: () => coursesApi.getAll(filters),
+    queryKey: ['courses', filters, debouncedSearch, category],
+    queryFn: () => coursesApi.getAll({
+      ...filters,
+      search: debouncedSearch || undefined,
+      difficulty: difficulty === 'all' ? undefined : difficulty as Difficulty,
+      tags: category !== 'all' ? [category] : undefined,
+    }),
   });
+
+  useEffect(() => {
+    setFilters(prev => ({
+      ...prev,
+      search: debouncedSearch || undefined,
+      page: 1,
+    }));
+  }, [debouncedSearch]);
 
   const handleSearch = (value: string) => {
     setSearch(value);
-    setFilters(prev => ({
-      ...prev,
-      search: value || undefined,
-      page: 1,
-    }));
   };
 
   const handleDifficultyChange = (value: string) => {
@@ -48,6 +60,14 @@ export default function CoursesPage() {
     setFilters(prev => ({
       ...prev,
       difficulty: value === 'all' ? undefined : value as Difficulty,
+      page: 1,
+    }));
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setCategory(value);
+    setFilters(prev => ({
+      ...prev,
       page: 1,
     }));
   };
@@ -61,6 +81,23 @@ export default function CoursesPage() {
       page: 1,
     }));
   };
+
+  // Fonction pour convertir les données de l'API au format attendu par CourseCard
+  const convertToCourseCardFormat = (course: any) => ({
+    id: course.id,
+    title: course.title,
+    slug: course.slug,
+    description: course.description,
+    shortDescription: course.shortDescription,
+    thumbnail: course.thumbnail,
+    difficulty: course.difficulty,
+    duration: course.duration,
+    instructor: course.instructor,
+    tags: course.tags,
+    totalStudents: course.totalStudents,
+    rating: course.rating,
+    isFeatured: course.isFeatured,
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
@@ -140,7 +177,7 @@ export default function CoursesPage() {
           </div>
 
           {/* Category Tabs */}
-          <Tabs defaultValue="all" className="w-full">
+          <Tabs value={category} onValueChange={handleCategoryChange} className="w-full">
             <TabsList className="w-full justify-start overflow-x-auto">
               <TabsTrigger value="all">Tous</TabsTrigger>
               <TabsTrigger value="javascript">JavaScript</TabsTrigger>
@@ -187,6 +224,7 @@ export default function CoursesPage() {
                 <Button onClick={() => {
                   setSearch('');
                   setDifficulty('all');
+                  setCategory('all');
                   setFilters({ page: 1, limit: 12 });
                 }}>
                   Réinitialiser les filtres
@@ -202,10 +240,8 @@ export default function CoursesPage() {
                   {coursesData?.data.map((course) => (
                     <CourseCard
                       key={course.id}
-                      course={course}
+                      course={convertToCourseCardFormat(course)}
                       variant={viewMode === 'grid' ? 'default' : 'compact'}
-                      showProgress={true}
-                      progress={Math.floor(Math.random() * 100)}
                     />
                   ))}
                 </div>

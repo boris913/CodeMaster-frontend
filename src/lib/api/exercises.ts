@@ -81,4 +81,10 @@ export const exercisesApi = {
     const response = await apiClient.post(`/exercises/${exerciseId}/test`, { code, language });
     return response.data;
   },
+
+  // Récupérer un exercice par leçon
+  getByLesson: async (lessonId: string): Promise<Exercise> => {
+    const response = await apiClient.get<Exercise>(`/exercises/lesson/${lessonId}`);
+    return response.data;
+  },
 };

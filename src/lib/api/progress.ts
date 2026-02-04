@@ -89,4 +89,10 @@ export const progressApi = {
     });
     return response.data;
   },
+
+  // Récupérer la progression d'une leçon
+  getLessonProgress: async (lessonId: string): Promise<any> => {
+    const response = await apiClient.get<any>(`/progress/lesson/${lessonId}`);
+    return response.data;
+  },
 };

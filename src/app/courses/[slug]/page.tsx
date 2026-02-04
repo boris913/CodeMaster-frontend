@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, notFound } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useParams, notFound, useRouter } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
 import { coursesApi } from '@/lib/api/courses';
+import { progressApi } from '@/lib/api/progress';
+import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -20,17 +22,20 @@ import {
   BookOpen, 
   ChevronRight,
   Play,
-  Download,
-  Share2,
   Heart,
   CheckCircle2
 } from 'lucide-react';
+import { CourseCard } from '@/components/course/course-card';
+import { useToast } from '@/hooks/use-toast';
 
 export default function CourseDetailPage() {
   const { slug } = useParams();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
-  const [isEnrolled, setIsEnrolled] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const { isAuthenticated } = useAuthStore();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: course, isLoading, error } = useQuery({
     queryKey: ['course', slug],
@@ -40,8 +45,42 @@ export default function CourseDetailPage() {
 
   const { data: similarCourses } = useQuery({
     queryKey: ['courses', 'similar'],
-    queryFn: () => coursesApi.getAll({ limit: 3 }),
+    queryFn: () => coursesApi.getAll({ 
+      limit: 3,
+      difficulty: course?.difficulty,
+    }),
     enabled: !!course,
+  });
+
+  const { data: userEnrollments } = useQuery({
+    queryKey: ['user-enrollments'],
+    queryFn: () => coursesApi.getEnrolled(),
+    enabled: isAuthenticated,
+  });
+
+  const { data: courseProgress } = useQuery({
+    queryKey: ['course-progress', course?.id],
+    queryFn: () => progressApi.getCourseProgress(course?.id!),
+    enabled: !!course && isAuthenticated,
+  });
+
+  const enrollMutation = useMutation({
+    mutationFn: () => coursesApi.enroll(course!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-enrollments'] });
+      toast({
+        title: 'Inscription réussie',
+        description: 'Vous êtes maintenant inscrit à ce cours',
+      });
+      router.push(`/learning/${course?.id}/start`);
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Erreur',
+        description: error.message || 'Échec de l\'inscription',
+        variant: 'destructive',
+      });
+    },
   });
 
   if (error) {
@@ -57,17 +96,25 @@ export default function CourseDetailPage() {
 
   const handleEnroll = async () => {
     if (!course) return;
-    try {
-      await coursesApi.enroll(course.id);
-      setIsEnrolled(true);
-    } catch (error) {
-      console.error('Failed to enroll:', error);
+    
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
     }
+
+    enrollMutation.mutate();
   };
 
-  const handleToggleFavorite = () => {
+  const handleToggleFavorite = async () => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
     setIsFavorite(!isFavorite);
   };
+
+  const isEnrolled = userEnrollments?.some(e => e.courseId === course?.id);
+  const enrollment = userEnrollments?.find(e => e.courseId === course?.id);
 
   if (isLoading) {
     return (
@@ -93,6 +140,23 @@ export default function CourseDetailPage() {
   if (!course) {
     notFound();
   }
+
+  // Helper pour convertir le cours API en format CourseCard
+  const convertToCourseCardFormat = (course: any) => ({
+    id: course.id,
+    title: course.title,
+    slug: course.slug,
+    description: course.description,
+    shortDescription: course.shortDescription,
+    thumbnail: course.thumbnail,
+    difficulty: course.difficulty,
+    duration: course.duration,
+    instructor: course.instructor,
+    tags: course.tags,
+    totalStudents: course.totalStudents,
+    rating: course.rating,
+    isFeatured: course.isFeatured,
+  });
 
   return (
     <div className="min-h-screen">
@@ -150,10 +214,11 @@ export default function CourseDetailPage() {
               </div>
 
               <div className="flex flex-wrap gap-2 mb-8">
-                <Badge variant="secondary">JavaScript</Badge>
-                <Badge variant="secondary">Frontend</Badge>
-                <Badge variant="secondary">React</Badge>
-                <Badge variant="secondary">Next.js</Badge>
+                {course.tags?.map((tag) => (
+                  <Badge key={tag.id} variant="secondary">
+                    {tag.name}
+                  </Badge>
+                ))}
               </div>
             </div>
 
@@ -163,10 +228,12 @@ export default function CourseDetailPage() {
                 {course.thumbnail && (
                   <div className="relative h-48 overflow-hidden rounded-t-lg">
                     <Image
-                      src={course.thumbnail}
+                      src={course.thumbnail.startsWith('http') ? course.thumbnail : `/api/images${course.thumbnail}`}
                       alt={course.title}
                       fill
                       className="object-cover"
+                      sizes="(max-width: 768px) 100vw, 384px"
+                      priority
                     />
                   </div>
                 )}
@@ -177,6 +244,7 @@ export default function CourseDetailPage() {
                       variant="ghost"
                       size="icon"
                       onClick={handleToggleFavorite}
+                      disabled={!isAuthenticated}
                     >
                       <Heart className={`h-5 w-5 ${isFavorite ? 'fill-red-500 text-red-500' : ''}`} />
                     </Button>
@@ -186,33 +254,25 @@ export default function CourseDetailPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Progression</span>
-                      <span className="font-medium">0%</span>
+                  {isEnrolled && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Progression</span>
+                        <span className="font-medium">{enrollment?.progress || 0}%</span>
+                      </div>
+                      <Progress value={enrollment?.progress || 0} />
                     </div>
-                    <Progress value={0} />
-                  </div>
+                  )}
 
                   <div className="space-y-2">
                     <h4 className="font-medium">Ce que vous apprendrez :</h4>
                     <ul className="space-y-2 text-sm text-muted-foreground">
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>Maîtriser les bases de JavaScript</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>Développer des applications web modernes</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>Travailler avec des API REST</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>Déployer vos applications</span>
-                      </li>
+                      {course.modules?.slice(0, 4).map((module) => (
+                        <li key={module.id} className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                          <span>{module.title}</span>
+                        </li>
+                      ))}
                     </ul>
                   </div>
 
@@ -221,7 +281,7 @@ export default function CourseDetailPage() {
                       className="flex-1"
                       size="lg"
                       onClick={handleEnroll}
-                      disabled={isEnrolled}
+                      disabled={isEnrolled || enrollMutation.isPending}
                     >
                       {isEnrolled ? (
                         <>
@@ -231,15 +291,9 @@ export default function CourseDetailPage() {
                       ) : (
                         <>
                           <Play className="mr-2 h-4 w-4" />
-                          Commencer le cours
+                          {enrollMutation.isPending ? 'Inscription...' : 'Commencer le cours'}
                         </>
                       )}
-                    </Button>
-                    <Button variant="outline" size="icon" className="shrink-0">
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon" className="shrink-0">
-                      <Download className="h-4 w-4" />
                     </Button>
                   </div>
                 </CardContent>
@@ -256,8 +310,6 @@ export default function CourseDetailPage() {
             <TabsTrigger value="overview">Aperçu</TabsTrigger>
             <TabsTrigger value="curriculum">Programme</TabsTrigger>
             <TabsTrigger value="instructor">Instructeur</TabsTrigger>
-            <TabsTrigger value="reviews">Avis</TabsTrigger>
-            <TabsTrigger value="faq">FAQ</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-8">
@@ -267,8 +319,8 @@ export default function CourseDetailPage() {
               
               <h3>À qui s'adresse ce cours ?</h3>
               <ul>
-                <li>Développeurs débutants souhaitant apprendre JavaScript</li>
-                <li>Développeurs frontend voulant se perfectionner</li>
+                <li>Développeurs débutants souhaitant apprendre {course.tags?.[0]?.name || 'la programmation'}</li>
+                <li>Développeurs voulant se perfectionner</li>
                 <li>Étudiants en informatique</li>
                 <li>Professionnels en reconversion</li>
               </ul>
@@ -293,9 +345,11 @@ export default function CourseDetailPage() {
                         {module.lessons?.length || 0} leçons
                       </span>
                     </CardTitle>
-                    <CardDescription>
-                      {module.description}
-                    </CardDescription>
+                    {module.description && (
+                      <CardDescription>
+                        {module.description}
+                      </CardDescription>
+                    )}
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
@@ -313,16 +367,18 @@ export default function CourseDetailPage() {
                               <div className="text-sm text-muted-foreground flex items-center gap-2">
                                 <Clock className="h-3 w-3" />
                                 {lesson.duration} minutes
-                                {lesson.isFree && (
-                                  <Badge variant="outline" className="text-xs">
-                                    Gratuit
-                                  </Badge>
-                                )}
                               </div>
                             </div>
                           </div>
-                          <Button variant="ghost" size="sm">
-                            <Play className="h-4 w-4" />
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            asChild
+                            disabled={!isEnrolled}
+                          >
+                            <Link href={`/learning/${course.id}/${lesson.id}`}>
+                              <Play className="h-4 w-4" />
+                            </Link>
                           </Button>
                         </div>
                       ))}
@@ -351,26 +407,16 @@ export default function CourseDetailPage() {
                       <p className="text-muted-foreground">Instructeur principal</p>
                     </div>
                     <p className="text-muted-foreground">
-                      Développeur full-stack avec plus de 10 ans d'expérience. Passionné par
-                      l'enseignement et le partage de connaissances. Spécialisé en JavaScript,
-                      React, Node.js et architectures cloud.
+                      Instructeur expérimenté passionné par l'enseignement.
                     </p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4">
                       <div className="text-center">
-                        <div className="text-2xl font-bold">4.9</div>
+                        <div className="text-2xl font-bold">{course.rating.toFixed(1)}</div>
                         <div className="text-sm text-muted-foreground">Note moyenne</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-bold">25K+</div>
+                        <div className="text-2xl font-bold">{course.totalStudents}</div>
                         <div className="text-sm text-muted-foreground">Étudiants</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">15</div>
-                        <div className="text-sm text-muted-foreground">Cours</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">8</div>
-                        <div className="text-sm text-muted-foreground">Années d'exp.</div>
                       </div>
                     </div>
                   </div>
@@ -381,21 +427,23 @@ export default function CourseDetailPage() {
         </Tabs>
 
         {/* Similar Courses */}
-        <div className="mt-16">
-          <h2 className="text-2xl font-bold mb-6">Cours similaires</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {similarCourses?.data
-              .filter(c => c.id !== course.id)
-              .slice(0, 3)
-              .map((similarCourse) => (
-                <CourseCard
-                  key={similarCourse.id}
-                  course={similarCourse}
-                  variant="compact"
-                />
-              ))}
+        {similarCourses && similarCourses.data.length > 0 && (
+          <div className="mt-16">
+            <h2 className="text-2xl font-bold mb-6">Cours similaires</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {similarCourses.data
+                .filter(c => c.id !== course.id)
+                .slice(0, 3)
+                .map((similarCourse) => (
+                  <CourseCard
+                    key={similarCourse.id}
+                    course={convertToCourseCardFormat(similarCourse)}
+                    variant="compact"
+                  />
+                ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -14,7 +14,6 @@ import {
   Clock, 
   TrendingUp, 
   Star,
-  Calendar,
   Target
 } from 'lucide-react';
 import { Enrollment } from '@/lib/api/courses';
