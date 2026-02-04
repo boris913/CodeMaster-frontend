@@ -5,42 +5,58 @@ import Editor from '@monaco-editor/react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Play,
-  RotateCcw,
-  Download,
-  Copy,
-  Eye,
-  EyeOff,
-  Check,
-  Terminal
-} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Play, RotateCcw, Download, Copy, Eye, EyeOff, Check, CheckCircle2, XCircle, Terminal } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+interface TestResult {
+  name?: string;
+  passed?: boolean;
+  error?: string;
+}
+
+interface ExecutionResult {
+  success: boolean;
+  output: string;
+  testResults?: TestResult[];
+  passedTests?: number;
+  totalTests?: number;
+  executionTime?: number;
+  memoryUsed?: number;
+}
 
 interface CodeEditorProps {
   language: 'javascript' | 'typescript' | 'python' | 'html' | 'css' | 'java';
   defaultValue: string;
-  onRun?: (code: string) => Promise<any>;
+  onRun?: (code: string) => Promise<ExecutionResult>;
   readOnly?: boolean;
   height?: string;
   showConsole?: boolean;
 }
 
-export function CodeEditor({ 
-  language, 
-  defaultValue, 
+export function CodeEditor({
+  language,
+  defaultValue,
   onRun,
   readOnly = false,
   height = '400px',
   showConsole = true
 }: CodeEditorProps) {
   const [code, setCode] = useState(defaultValue);
-  const [output, setOutput] = useState<string>('');
+  const [output, setOutput] = useState('');
+  const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [executionStats, setExecutionStats] = useState<{
+    passedTests: number;
+    totalTests: number;
+    executionTime?: number;
+    memoryUsed?: number;
+  } | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [isSuccess, setIsSuccess] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
   const [showOutput, setShowOutput] = useState(true);
   const { theme } = useTheme();
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef(null);
 
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
@@ -48,14 +64,34 @@ export function CodeEditor({
 
   const handleRun = async () => {
     if (!onRun) return;
-    
+
     setIsRunning(true);
     setOutput('Exécution en cours...');
-    
+    setTestResults([]);
+    setExecutionStats(null);
+    setIsSuccess(null);
+
     try {
       const result = await onRun(code);
-      setOutput(typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+      
+      // CORRECTION: Parser et afficher les résultats des tests
+      setIsSuccess(result.success);
+      setOutput(result.output || '');
+      
+      if (result.testResults && result.testResults.length > 0) {
+        setTestResults(result.testResults);
+      }
+      
+      if (result.passedTests !== undefined && result.totalTests !== undefined) {
+        setExecutionStats({
+          passedTests: result.passedTests,
+          totalTests: result.totalTests,
+          executionTime: result.executionTime,
+          memoryUsed: result.memoryUsed,
+        });
+      }
     } catch (error: any) {
+      setIsSuccess(false);
       setOutput(`Erreur: ${error.message || 'Une erreur est survenue'}`);
     } finally {
       setIsRunning(false);
@@ -65,6 +101,9 @@ export function CodeEditor({
   const handleReset = () => {
     setCode(defaultValue);
     setOutput('');
+    setTestResults([]);
+    setExecutionStats(null);
+    setIsSuccess(null);
   };
 
   const handleCopy = async () => {
@@ -96,25 +135,15 @@ export function CodeEditor({
   };
 
   return (
-    <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-background">
+    <div className="space-y-4">
       {/* Editor Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50">
+      <div className="flex items-center justify-between rounded-t-lg border border-b-0 bg-muted/50 p-3">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className={`h-3 w-3 rounded-full ${
-              language === 'javascript' ? 'bg-yellow-500' :
-              language === 'typescript' ? 'bg-blue-500' :
-              language === 'python' ? 'bg-green-500' :
-              language === 'html' ? 'bg-orange-500' :
-              language === 'css' ? 'bg-pink-500' : 'bg-purple-500'
-            }`} />
-            <span className="text-sm font-medium">{getLanguageLabel()}</span>
-          </div>
-          <div className="text-xs text-muted-foreground">
+          <Badge variant="secondary">{getLanguageLabel()}</Badge>
+          <span className="text-sm text-muted-foreground">
             {code.length} caractères
-          </div>
+          </span>
         </div>
-
         <div className="flex items-center gap-2">
           {!readOnly && (
             <>
@@ -122,8 +151,9 @@ export function CodeEditor({
                 size="sm"
                 onClick={handleRun}
                 disabled={isRunning}
+                className="gap-2"
               >
-                <Play className="h-4 w-4 mr-1" />
+                <Play className="h-4 w-4" />
                 {isRunning ? 'Exécution...' : 'Exécuter'}
               </Button>
               <Button
@@ -131,8 +161,7 @@ export function CodeEditor({
                 variant="outline"
                 onClick={handleReset}
               >
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Réinitialiser
+                <RotateCcw className="h-4 w-4" />
               </Button>
             </>
           )}
@@ -154,8 +183,9 @@ export function CodeEditor({
       </div>
 
       {/* Editor Area */}
-      <div className="flex-1 overflow-hidden" style={{ height }}>
+      <div className="rounded-b-lg border border-t-0 overflow-hidden">
         <Editor
+          height={height}
           language={language}
           value={code}
           onChange={(value) => setCode(value || '')}
@@ -170,33 +200,27 @@ export function CodeEditor({
             automaticLayout: true,
             formatOnPaste: true,
             formatOnType: true,
-            suggest: {
-              showWords: false,
-              showSnippets: false
-            }
+            suggest: { showWords: false, showSnippets: false }
           }}
         />
       </div>
 
       {/* Console Output */}
       {showConsole && (
-        <div className={cn(
-          'border-t transition-all duration-300',
-          showOutput ? 'h-48' : 'h-10'
-        )}>
-          <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+        <div className="rounded-lg border">
+          <div className="flex items-center justify-between border-b bg-muted/50 p-3">
             <div className="flex items-center gap-2">
               <Terminal className="h-4 w-4" />
-              <span className="text-sm font-medium">Console</span>
-              {output && (
-                <span className="text-xs text-muted-foreground">
-                  {output.split('\n').length} lignes
-                </span>
+              <span className="font-medium">Console</span>
+              {executionStats && (
+                <Badge variant={isSuccess ? 'default' : 'destructive'}>
+                  {executionStats.passedTests}/{executionStats.totalTests} tests réussis
+                </Badge>
               )}
             </div>
             <Button
-              variant="ghost"
               size="sm"
+              variant="ghost"
               onClick={() => setShowOutput(!showOutput)}
             >
               {showOutput ? (
@@ -206,42 +230,120 @@ export function CodeEditor({
               )}
             </Button>
           </div>
-          
+
           {showOutput && (
-            <div className="h-40 overflow-auto p-4 font-mono text-sm bg-black/50">
-              {output ? (
-                <pre className="whitespace-pre-wrap break-words">{output}</pre>
-              ) : (
-                <div className="text-muted-foreground italic">
-                  Exécutez votre code pour voir le résultat ici...
-                </div>
+            <Tabs defaultValue="output" className="p-4">
+              <TabsList>
+                <TabsTrigger value="output">Sortie</TabsTrigger>
+                {testResults.length > 0 && (
+                  <TabsTrigger value="tests">Tests ({testResults.length})</TabsTrigger>
+                )}
+                {executionStats && (
+                  <TabsTrigger value="stats">Statistiques</TabsTrigger>
+                )}
+              </TabsList>
+
+              <TabsContent value="output" className="mt-4">
+                {output ? (
+                  <pre className="rounded-md bg-muted p-4 overflow-x-auto custom-scrollbar">
+                    <code className="text-sm">{output}</code>
+                  </pre>
+                ) : (
+                  <div className="flex items-center justify-center p-8 text-muted-foreground">
+                    <Terminal className="mr-2 h-4 w-4" />
+                    Exécutez votre code pour voir le résultat ici...
+                  </div>
+                )}
+              </TabsContent>
+
+              {testResults.length > 0 && (
+                <TabsContent value="tests" className="mt-4 space-y-2">
+                  {testResults.map((test, index) => (
+                    <div
+                      key={index}
+                      className={cn(
+                        'flex items-start gap-3 rounded-lg border p-3',
+                        test.passed ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950' : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950'
+                      )}
+                    >
+                      {test.passed ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium">
+                          {test.name || `Test ${index + 1}`}
+                        </div>
+                        {test.error && (
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            {test.error}
+                          </div>
+                        )}
+                      </div>
+                      <Badge variant={test.passed ? 'default' : 'destructive'}>
+                        {test.passed ? 'Réussi' : 'Échoué'}
+                      </Badge>
+                    </div>
+                  ))}
+                </TabsContent>
               )}
-            </div>
+
+              {executionStats && (
+                <TabsContent value="stats" className="mt-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-lg border p-4">
+                      <div className="text-sm text-muted-foreground">Tests réussis</div>
+                      <div className="text-2xl font-bold">
+                        {executionStats.passedTests} / {executionStats.totalTests}
+                      </div>
+                    </div>
+                    {executionStats.executionTime !== undefined && (
+                      <div className="rounded-lg border p-4">
+                        <div className="text-sm text-muted-foreground">Temps d'exécution</div>
+                        <div className="text-2xl font-bold">
+                          {executionStats.executionTime} ms
+                        </div>
+                      </div>
+                    )}
+                    {executionStats.memoryUsed !== undefined && (
+                      <div className="rounded-lg border p-4">
+                        <div className="text-sm text-muted-foreground">Mémoire utilisée</div>
+                        <div className="text-2xl font-bold">
+                          {(executionStats.memoryUsed / 1024).toFixed(2)} KB
+                        </div>
+                      </div>
+                    )}
+                    <div className="rounded-lg border p-4">
+                      <div className="text-sm text-muted-foreground">Taux de réussite</div>
+                      <div className="text-2xl font-bold">
+                        {Math.round((executionStats.passedTests / executionStats.totalTests) * 100)}%
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+              )}
+            </Tabs>
           )}
         </div>
       )}
 
       {/* Editor Footer */}
-      <div className="px-4 py-2 border-t bg-muted/30 text-xs text-muted-foreground flex items-center justify-between">
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <div>Ligne: 1, Colonne: 1</div>
         <div className="flex items-center gap-4">
-          <div>Ligne: 1, Colonne: 1</div>
-          <div>UTF-8</div>
-          <div>Espaces: 2</div>
-        </div>
-        <div>
+          <span>UTF-8</span>
+          <span>Espaces: 2</span>
           {!readOnly && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 text-xs"
-                onClick={() => {
-                  editorRef.current?.trigger('keyboard', 'editor.action.formatDocument');
-                }}
-              >
-                Formater
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                editorRef.current?.trigger('keyboard', 'editor.action.formatDocument');
+              }}
+            >
+              Formater
+            </Button>
           )}
         </div>
       </div>

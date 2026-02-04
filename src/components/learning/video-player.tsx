@@ -5,16 +5,14 @@ import ReactPlayer from 'react-player';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { 
-  Play,
-  Pause,
-  Volume2,
-  VolumeX,
-  Maximize2,
-  SkipBack,
-  SkipForward,
-  Settings,
-  Monitor,
-  Clock
+  Play, 
+  Pause, 
+  Volume2, 
+  VolumeX, 
+  Maximize2, 
+  SkipBack, 
+  SkipForward, 
+  Settings 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,13 +25,13 @@ interface VideoPlayerProps {
   className?: string;
 }
 
-export function VideoPlayer({ 
-  src, 
+export function VideoPlayer({
+  src,
   title,
-  onProgress, 
+  onProgress,
   onComplete,
   startAt = 0,
-  className 
+  className
 }: VideoPlayerProps) {
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -43,37 +41,83 @@ export function VideoPlayer({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(startAt);
   const [showControls, setShowControls] = useState(true);
+  const [seeking, setSeeking] = useState(false);
+  
   const playerRef = useRef<ReactPlayer>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setShowControls(false);
+      if (playing) {
+        setShowControls(false);
+      }
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [showControls]);
+  }, [showControls, playing]);
+
+  // Sauvegarder la position toutes les 5 secondes pendant la lecture
+  useEffect(() => {
+    if (playing && onProgress) {
+      progressIntervalRef.current = setInterval(() => {
+        if (playerRef.current) {
+          const currentSeconds = playerRef.current.getCurrentTime();
+          onProgress(currentSeconds);
+        }
+      }, 5000); // Sauvegarder toutes les 5 secondes
+
+      return () => {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+        }
+      };
+    }
+  }, [playing, onProgress]);
 
   const handlePlay = () => setPlaying(!playing);
   const handleMute = () => setMuted(!muted);
+
   const handleVolumeChange = (value: number[]) => {
     const newVolume = value[0];
     setVolume(newVolume);
     setMuted(newVolume === 0);
   };
 
-  const handleProgress = (state: { played: number; playedSeconds: number }) => {
-    setPlayed(state.played);
-    setCurrentTime(state.playedSeconds);
-    onProgress?.(state.playedSeconds);
+  const handleProgress = (state: { 
+    played: number; 
+    playedSeconds: number;
+    loaded: number;
+    loadedSeconds: number;
+  }) => {
+    if (!seeking) {
+      setPlayed(state.played);
+      setCurrentTime(state.playedSeconds);
+      
+      // Appeler onProgress pour les mises à jour en temps réel
+      if (onProgress) {
+        onProgress(state.playedSeconds);
+      }
+    }
   };
 
   const handleSeek = (value: number[]) => {
     const newPlayed = value[0];
     setPlayed(newPlayed);
+    setSeeking(false);
     if (playerRef.current) {
       playerRef.current.seekTo(newPlayed);
+      const newTime = newPlayed * duration;
+      setCurrentTime(newTime);
+      // Sauvegarder immédiatement après un seek
+      if (onProgress) {
+        onProgress(newTime);
+      }
     }
+  };
+
+  const handleSeekMouseDown = () => {
+    setSeeking(true);
   };
 
   const handleDuration = (duration: number) => {
@@ -82,7 +126,13 @@ export function VideoPlayer({
 
   const handleEnded = () => {
     setPlaying(false);
-    onComplete?.();
+    if (onComplete) {
+      onComplete();
+    }
+    // Sauvegarder la position finale
+    if (onProgress) {
+      onProgress(duration);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -100,7 +150,7 @@ export function VideoPlayer({
 
   const handleFullscreen = () => {
     if (!containerRef.current) return;
-    
+
     if (document.fullscreenElement) {
       document.exitFullscreen();
     } else {
@@ -110,20 +160,36 @@ export function VideoPlayer({
 
   const handleSkipBack = () => {
     if (playerRef.current) {
-      playerRef.current.seekTo(Math.max(0, currentTime - 10));
+      const newTime = Math.max(0, currentTime - 10);
+      playerRef.current.seekTo(newTime);
+      setCurrentTime(newTime);
     }
   };
 
   const handleSkipForward = () => {
     if (playerRef.current) {
-      playerRef.current.seekTo(Math.min(duration, currentTime + 10));
+      const newTime = Math.min(duration, currentTime + 10);
+      playerRef.current.seekTo(newTime);
+      setCurrentTime(newTime);
     }
   };
 
+  // Sauvegarder la position avant de quitter
+  useEffect(() => {
+    return () => {
+      if (onProgress && currentTime > 0) {
+        onProgress(currentTime);
+      }
+    };
+  }, [currentTime, onProgress]);
+
   return (
-    <div 
+    <div
       ref={containerRef}
-      className={cn('relative aspect-video bg-black rounded-lg overflow-hidden group', className)}
+      className={cn(
+        'group relative aspect-video w-full overflow-hidden rounded-lg bg-black',
+        className
+      )}
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
       onMouseMove={() => {
@@ -133,51 +199,46 @@ export function VideoPlayer({
       <ReactPlayer
         ref={playerRef}
         url={src}
+        width="100%"
+        height="100%"
         playing={playing}
         muted={muted}
         volume={volume}
         playbackRate={playbackRate}
-        width="100%"
-        height="100%"
         onProgress={handleProgress}
         onDuration={handleDuration}
         onEnded={handleEnded}
-        config={{
-          youtube: {
-            playerVars: { showinfo: 0, controls: 0 }
-          },
-          file: {
-            attributes: {
-              controlsList: 'nodownload'
-            }
-          }
-        }}
+        progressInterval={100}
       />
 
       {/* Custom Controls */}
-      <div className={cn(
-        'absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300',
-        showControls ? 'opacity-100' : 'opacity-0'
-      )}>
+      <div
+        className={cn(
+          'absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300',
+          showControls ? 'opacity-100' : 'opacity-0'
+        )}
+      >
         {/* Top Bar */}
         <div className="absolute top-0 left-0 right-0 p-4">
           {title && (
-            <div className="text-white font-medium truncate">{title}</div>
+            <div className="text-white font-medium drop-shadow-lg">
+              {title}
+            </div>
           )}
         </div>
 
         {/* Center Play Button */}
         <div className="absolute inset-0 flex items-center justify-center">
           <Button
-            variant="ghost"
             size="icon"
-            className="h-16 w-16 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm"
+            variant="ghost"
+            className="h-20 w-20 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm"
             onClick={handlePlay}
           >
             {playing ? (
-              <Pause className="h-8 w-8 text-white" />
+              <Pause className="h-10 w-10 text-white" />
             ) : (
-              <Play className="h-8 w-8 text-white" />
+              <Play className="h-10 w-10 text-white ml-1" />
             )}
           </Button>
         </div>
@@ -185,27 +246,26 @@ export function VideoPlayer({
         {/* Bottom Controls */}
         <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
           {/* Progress Bar */}
-          <div className="space-y-1">
+          <div className="flex items-center gap-2 text-white text-sm">
+            <span>{formatTime(currentTime)}</span>
             <Slider
               value={[played]}
               min={0}
-              max={1}
+              max={0.999999}
               step={0.001}
               onValueChange={handleSeek}
-              className="w-full"
+              onPointerDown={handleSeekMouseDown}
+              className="flex-1"
             />
-            <div className="flex items-center justify-between text-sm text-white/80">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
+            <span>{formatTime(duration)}</span>
           </div>
 
           {/* Control Buttons */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Button
-                variant="ghost"
                 size="icon"
+                variant="ghost"
                 className="text-white hover:bg-white/20"
                 onClick={handlePlay}
               >
@@ -217,8 +277,8 @@ export function VideoPlayer({
               </Button>
 
               <Button
-                variant="ghost"
                 size="icon"
+                variant="ghost"
                 className="text-white hover:bg-white/20"
                 onClick={handleSkipBack}
               >
@@ -226,18 +286,18 @@ export function VideoPlayer({
               </Button>
 
               <Button
-                variant="ghost"
                 size="icon"
+                variant="ghost"
                 className="text-white hover:bg-white/20"
                 onClick={handleSkipForward}
               >
                 <SkipForward className="h-5 w-5" />
               </Button>
 
-              <div className="flex items-center gap-2 ml-2">
+              <div className="flex items-center gap-2">
                 <Button
-                  variant="ghost"
                   size="icon"
+                  variant="ghost"
                   className="text-white hover:bg-white/20"
                   onClick={handleMute}
                 >
@@ -260,17 +320,18 @@ export function VideoPlayer({
 
             <div className="flex items-center gap-2">
               <Button
+                size="sm"
                 variant="ghost"
-                size="icon"
                 className="text-white hover:bg-white/20"
                 onClick={handleSpeedChange}
               >
-                <span className="text-sm font-medium">{playbackRate}x</span>
+                <Settings className="h-4 w-4 mr-1" />
+                {playbackRate}x
               </Button>
 
               <Button
-                variant="ghost"
                 size="icon"
+                variant="ghost"
                 className="text-white hover:bg-white/20"
                 onClick={handleFullscreen}
               >
@@ -279,27 +340,23 @@ export function VideoPlayer({
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Speed and Quality Indicators */}
-        <div className="absolute top-4 right-4 flex items-center gap-3">
-          {playbackRate !== 1 && (
-            <div className="px-2 py-1 rounded bg-black/50 text-white text-sm">
-              {playbackRate}x
-            </div>
-          )}
-          <div className="px-2 py-1 rounded bg-black/50 text-white text-sm flex items-center gap-1">
-            <Monitor className="h-3 w-3" />
-            1080p
-          </div>
-        </div>
-
-        {/* Buffering Indicator */}
-        {playing && !playerRef.current?.props.playing && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="text-white">Chargement...</div>
+      {/* Speed and Quality Indicators */}
+      <div className="absolute top-4 right-4 flex gap-2">
+        {playbackRate !== 1 && (
+          <div className="rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm">
+            {playbackRate}x
           </div>
         )}
       </div>
+
+      {/* Buffering Indicator */}
+      {playing && !playerRef.current?.props.playing && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div className="text-white">Chargement...</div>
+        </div>
+      )}
     </div>
   );
 }

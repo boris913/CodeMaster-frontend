@@ -49,7 +49,7 @@ export interface LeaderboardEntry {
 export const progressApi = {
   // Récupérer la progression de l'utilisateur
   getUserProgress: async (courseId?: string): Promise<any[]> => {
-    const response = await apiClient.get<any[]>('/progress', {
+    const response = await apiClient.get('/progress', {
       params: { courseId },
     });
     return response.data;
@@ -57,7 +57,7 @@ export const progressApi = {
 
   // Récupérer la progression d'un cours
   getCourseProgress: async (courseId: string): Promise<CourseProgress> => {
-    const response = await apiClient.get<CourseProgress>(`/progress/course/${courseId}`);
+    const response = await apiClient.get(`/progress/course/${courseId}`);
     return response.data;
   },
 
@@ -70,13 +70,13 @@ export const progressApi = {
       lastPosition?: number;
     }
   ): Promise<any> => {
-    const response = await apiClient.post<any>(`/progress/lesson/${lessonId}`, data);
+    const response = await apiClient.post(`/progress/lesson/${lessonId}`, data);
     return response.data;
   },
 
-  // Récupérer les activités récentes
+  // Récupérer les activités récentes - CORRECTION DE L'ENDPOINT
   getRecentActivity: async (limit: number = 10): Promise<any[]> => {
-    const response = await apiClient.get<any[]>('/progress/recent', {
+    const response = await apiClient.get('/progress/recent', {
       params: { limit },
     });
     return response.data;
@@ -84,7 +84,7 @@ export const progressApi = {
 
   // Récupérer le classement d'un cours
   getLeaderboard: async (courseId: string, limit: number = 10): Promise<LeaderboardEntry[]> => {
-    const response = await apiClient.get<LeaderboardEntry[]>(`/progress/leaderboard/${courseId}`, {
+    const response = await apiClient.get(`/progress/leaderboard/${courseId}`, {
       params: { limit },
     });
     return response.data;
@@ -92,7 +92,7 @@ export const progressApi = {
 
   // Récupérer la progression d'une leçon
   getLessonProgress: async (lessonId: string): Promise<any> => {
-    const response = await apiClient.get<any>(`/progress/lesson/${lessonId}`);
+    const response = await apiClient.get(`/progress/lesson/${lessonId}`);
     return response.data;
   },
 };
