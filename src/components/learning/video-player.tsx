@@ -84,21 +84,21 @@ export function VideoPlayer({
     setMuted(newVolume === 0);
   };
 
-  const handleProgress = (state: { 
-    played: number; 
-    playedSeconds: number;
-    loaded: number;
-    loadedSeconds: number;
-  }) => {
-    if (!seeking) {
-      setPlayed(state.played);
-      setCurrentTime(state.playedSeconds);
-      
-      // Appeler onProgress pour les mises à jour en temps réel
-      if (onProgress) {
-        onProgress(state.playedSeconds);
-      }
+  const handleProgress = (state: { played: number; playedSeconds: number }) => {
+    setPlayed(state.played);
+    setCurrentTime(state.playedSeconds);
+    
+    // Sauvegarde automatique toutes les 10 secondes
+    if (Math.floor(state.playedSeconds) % 10 === 0) {
+      onProgress?.(state.playedSeconds);
     }
+  };
+
+  // Nouvelle fonction pour sauvegarder à la fin
+  const handleEnded = () => {
+    setPlaying(false);
+    onProgress?.(duration);
+    onComplete?.();
   };
 
   const handleSeek = (value: number[]) => {
@@ -122,17 +122,6 @@ export function VideoPlayer({
 
   const handleDuration = (duration: number) => {
     setDuration(duration);
-  };
-
-  const handleEnded = () => {
-    setPlaying(false);
-    if (onComplete) {
-      onComplete();
-    }
-    // Sauvegarder la position finale
-    if (onProgress) {
-      onProgress(duration);
-    }
   };
 
   const formatTime = (seconds: number) => {

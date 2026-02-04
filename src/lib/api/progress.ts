@@ -27,6 +27,7 @@ export interface CourseProgress {
   overallProgress: number;
   totalTimeSpent: number;
   modules: ModuleProgress[];
+  lastActivity: any | null;
 }
 
 export interface LeaderboardEntry {
@@ -46,6 +47,22 @@ export interface LeaderboardEntry {
   lastActivity: string;
 }
 
+export interface RecentActivity {
+  id: string;
+  lessonId: string;
+  lessonTitle: string;
+  moduleId: string;
+  moduleTitle: string;
+  courseId: string;
+  courseTitle: string;
+  courseThumbnail?: string;
+  completed: boolean;
+  completedAt?: string;
+  timeSpent: number;
+  lastPosition?: number;
+  updatedAt: string;
+}
+
 export const progressApi = {
   // Récupérer la progression de l'utilisateur
   getUserProgress: async (courseId?: string): Promise<any[]> => {
@@ -57,7 +74,7 @@ export const progressApi = {
 
   // Récupérer la progression d'un cours
   getCourseProgress: async (courseId: string): Promise<CourseProgress> => {
-    const response = await apiClient.get(`/progress/course/${courseId}`);
+    const response = await apiClient.get<CourseProgress>(`/progress/course/${courseId}`);
     return response.data;
   },
 
@@ -75,8 +92,8 @@ export const progressApi = {
   },
 
   // Récupérer les activités récentes - CORRECTION DE L'ENDPOINT
-  getRecentActivity: async (limit: number = 10): Promise<any[]> => {
-    const response = await apiClient.get('/progress/recent', {
+  getRecentActivity: async (limit: number = 10): Promise<RecentActivity[]> => {
+    const response = await apiClient.get<RecentActivity[]>('/progress/recent', {
       params: { limit },
     });
     return response.data;
@@ -84,7 +101,7 @@ export const progressApi = {
 
   // Récupérer le classement d'un cours
   getLeaderboard: async (courseId: string, limit: number = 10): Promise<LeaderboardEntry[]> => {
-    const response = await apiClient.get(`/progress/leaderboard/${courseId}`, {
+    const response = await apiClient.get<LeaderboardEntry[]>(`/progress/leaderboard/${courseId}`, {
       params: { limit },
     });
     return response.data;

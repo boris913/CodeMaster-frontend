@@ -106,6 +106,45 @@ export interface PaginatedResponse<T> {
     totalPages: number;
   };
 }
+export interface CreateCourseData {
+  title: string;
+  slug: string;
+  description: string;
+  shortDescription?: string;
+  thumbnail?: string;
+  difficulty?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  duration?: number;
+  tags?: string[];
+}
+
+export interface UpdateCourseData {
+  title?: string;
+  slug?: string;
+  description?: string;
+  shortDescription?: string;
+  thumbnail?: string;
+  difficulty?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  duration?: number;
+  tags?: string[];
+}
+
+export interface CourseEnrollment {
+  id: string;
+  userId: string;
+  user?: {
+    id: string;
+    username: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    avatar?: string;
+    lastLogin?: string;
+  };
+  progress: number;
+  completed: boolean;
+  completedAt?: string;
+  enrolledAt: string;
+}
 
 export const coursesApi = {
   // Récupérer tous les cours
@@ -120,7 +159,7 @@ export const coursesApi = {
     return response.data;
   },
 
-  // Récupérer les cours d'un instructeur
+  // Récupérer les cours d'un utilisateur courant
   getByInstructor: async (instructorId: string, filters: CourseFilters = {}): Promise<PaginatedResponse<Course>> => {
     const response = await apiClient.get<PaginatedResponse<Course>>('/courses/my-courses', {
       params: { ...filters, instructorId },
@@ -176,4 +215,21 @@ export const coursesApi = {
     });
     return response.data;
   },
+
+    // Créer un cours
+    create: async (data: CreateCourseData): Promise<Course> => {
+      const response = await apiClient.post<Course>('/courses', data);
+      return response.data;
+    },
+  
+    // Mettre à jour un cours
+    update: async (courseId: string, data: UpdateCourseData): Promise<Course> => {
+      const response = await apiClient.patch<Course>(`/courses/${courseId}`, data);
+      return response.data;
+    },
+  
+    // Supprimer un cours
+    delete: async (courseId: string): Promise<void> => {
+      await apiClient.delete(`/courses/${courseId}`);
+    },
 };

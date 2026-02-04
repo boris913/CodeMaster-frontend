@@ -114,11 +114,54 @@ export default function LearningPage() {
   }, [isAuthenticated, courseId, lessonId, router]);
 
   const handleRunCode = async (code: string) => {
+    if (!exercise?.id) {
+      toast({
+        title: 'Erreur',
+        description: 'Aucun exercice trouvé',
+        variant: 'destructive',
+      });
+      return { success: false, output: 'Aucun exercice trouvé' };
+    }
+
     try {
-      const result = await submitExerciseMutation.mutateAsync(code);
-      return { success: result.status === 'SUCCESS', output: result.result || 'Aucun résultat' };
+      const result = await submitExerciseMutation.mutateAsync({
+        code,
+        language: exercise.language,
+      });
+
+      // Affichage détaillé des résultats
+      const testResults = result.result?.testResults || [];
+      const passedTests = testResults.filter((t: any) => t.passed).length;
+      const totalTests = testResults.length;
+
+      if (result.status === 'SUCCESS') {
+        toast({
+          title: 'Exercice réussi !',
+          description: `Vous avez passé ${passedTests}/${totalTests} tests`,
+        });
+      } else {
+        toast({
+          title: 'Exercice échoué',
+          description: `Vous avez passé ${passedTests}/${totalTests} tests`,
+          variant: 'destructive',
+        });
+      }
+
+      return {
+        success: result.status === 'SUCCESS',
+        output: result.result?.output || result.result?.error || 'Aucun résultat',
+        testResults,
+        passedTests,
+        totalTests,
+      };
     } catch (error: any) {
-      return { success: false, output: error.message || 'Une erreur est survenue' };
+      return {
+        success: false,
+        output: error.message || 'Une erreur est survenue',
+        testResults: [],
+        passedTests: 0,
+        totalTests: 0,
+      };
     }
   };
 
@@ -138,7 +181,6 @@ export default function LearningPage() {
 
   const handleVideoProgress = async (position: number) => {
     if (!lessonId) return;
-    
     try {
       await updateProgressMutation.mutateAsync(position);
     } catch (error) {
