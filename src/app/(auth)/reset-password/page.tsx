@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Lock, Eye, EyeOff } from 'lucide-react';
+import { Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const resetPasswordSchema = z.object({
   password: z
@@ -32,13 +32,14 @@ type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get('token');
+  const params = useParams();
+  const token = params.token as string;
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const {
     register,
@@ -64,7 +65,10 @@ export default function ResetPasswordPage() {
         confirmPassword: data.confirmPassword,
       });
       
-      router.push('/login?reset=success');
+      setSuccess(true);
+      setTimeout(() => {
+        router.push('/login?reset=success');
+      }, 3000);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Token invalide ou expiré');
     } finally {
@@ -87,6 +91,24 @@ export default function ResetPasswordPage() {
               Demander un nouveau lien
             </Button>
           </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (success) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100 dark:from-gray-900 dark:to-gray-800 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+              <Lock className="h-6 w-6 text-green-600 dark:text-green-400" />
+            </div>
+            <CardTitle>Mot de passe réinitialisé !</CardTitle>
+            <CardDescription>
+              Votre mot de passe a été réinitialisé avec succès. Redirection vers la page de connexion...
+            </CardDescription>
+          </CardHeader>
         </Card>
       </div>
     );
@@ -119,11 +141,13 @@ export default function ResetPasswordPage() {
                   placeholder="••••••••"
                   className="pl-10 pr-10"
                   {...register('password')}
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -143,11 +167,13 @@ export default function ResetPasswordPage() {
                   placeholder="••••••••"
                   className="pl-10 pr-10"
                   {...register('confirmPassword')}
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                  disabled={isLoading}
                 >
                   {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -170,7 +196,14 @@ export default function ResetPasswordPage() {
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Réinitialisation...' : 'Réinitialiser le mot de passe'}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Réinitialisation...
+                </>
+              ) : (
+                'Réinitialiser le mot de passe'
+              )}
             </Button>
           </form>
         </CardContent>
