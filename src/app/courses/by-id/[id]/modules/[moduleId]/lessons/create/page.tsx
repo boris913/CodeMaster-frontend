@@ -31,7 +31,7 @@ const lessonSchema = z.object({
   title: z.string().min(5, 'Le titre doit contenir au moins 5 caractères'),
   content: z.string().min(50, 'Le contenu doit contenir au moins 50 caractères'),
   videoUrl: z.string().optional(),
-  videoType: z.enum(['YOUTUBE', 'VIMEO', 'UPLOADED']).optional(),
+  videoType: z.enum(['YOUTUBE', 'VIMEO', 'UPLOADED', 'NONE']).optional(),
   duration: z.number().min(1, 'La durée doit être d\'au moins 1 minute'),
   isFree: z.boolean().default(false),
 });
@@ -48,7 +48,8 @@ export default function CreateLessonPage() {
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [videoType, setVideoType] = useState<'YOUTUBE' | 'VIMEO' | 'UPLOADED' | ''>('');
+  // Initialisation à 'NONE' au lieu de '' pour éviter l'erreur Radix
+  const [videoType, setVideoType] = useState<'YOUTUBE' | 'VIMEO' | 'UPLOADED' | 'NONE'>('NONE');
 
   const { data: module, isLoading: isLoadingModule } = useQuery({
     queryKey: ['module', moduleId],
@@ -67,7 +68,7 @@ export default function CreateLessonPage() {
     defaultValues: {
       duration: 10,
       isFree: false,
-      videoType: 'YOUTUBE',
+      videoType: 'NONE',
     },
   });
 
@@ -96,14 +97,23 @@ export default function CreateLessonPage() {
   const onSubmit = async (data: LessonFormData) => {
     setIsLoading(true);
     setError(null);
-
+  
     try {
-      await createLessonMutation.mutateAsync({
+      // On prépare le payload
+      const payload = {
         ...data,
-        videoType: videoType as any,
-      });
+        // Si c'est NONE, on envoie undefined (ou null selon ton API)
+        videoType: videoType === 'NONE' ? undefined : videoType,
+      };
+  
+      // On supprime videoUrl si on n'a pas de vidéo
+      if (videoType === 'NONE') {
+        delete payload.videoUrl;
+      }
+  
+      await createLessonMutation.mutateAsync(payload as any);
     } catch (err) {
-      // Error handled in mutation
+      // Erreur gérée dans la mutation
     } finally {
       setIsLoading(false);
     }
@@ -226,7 +236,8 @@ export default function CreateLessonPage() {
                           Vidéo téléchargée
                         </div>
                       </SelectItem>
-                      <SelectItem value="">
+                      {/* Changement de "" vers "NONE" ici */}
+                      <SelectItem value="NONE">
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4" />
                           Texte seulement
@@ -237,7 +248,8 @@ export default function CreateLessonPage() {
                 </div>
               </div>
 
-              {videoType && (
+              {/* Condition mise à jour pour exclure 'NONE' */}
+              {videoType !== 'NONE' && (
                 <div className="space-y-2">
                   <Label htmlFor="videoUrl">
                     URL de la vidéo *
@@ -291,22 +303,7 @@ export default function CreateLessonPage() {
                 <Label htmlFor="content">Contenu (Markdown supporté) *</Label>
                 <Textarea
                   id="content"
-                  placeholder="# Introduction
-
-Dans cette leçon, vous allez apprendre...
-
-## Objectifs d'apprentissage
-
-- Comprendre les concepts de base
-- Savoir utiliser les variables
-- Pratiquer avec des exemples
-
-## Exemple de code
-
-\`\`\`javascript
-let message = 'Bonjour';
-console.log(message);
-\`\`\`"
+                  placeholder="# Introduction..."
                   {...register('content')}
                   className="min-h-[400px] font-mono"
                   disabled={isLoading}
@@ -314,9 +311,6 @@ console.log(message);
                 {errors.content && (
                   <p className="text-sm text-destructive">{errors.content.message}</p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  Supporte le format Markdown. Utilisez # pour les titres, * pour les listes, \`\`\` pour le code.
-                </p>
               </div>
             </CardContent>
           </Card>
@@ -335,11 +329,9 @@ console.log(message);
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  // Sauvegarder comme brouillon
-                  setValue('title', watch('title') || 'Nouvelle leçon');
                   toast({
                     title: 'Brouillon sauvegardé',
-                    description: 'Votre leçon a été sauvegardée comme brouillon',
+                    description: 'Votre leçon a été sauvegardée localement',
                   });
                 }}
                 disabled={isLoading}
