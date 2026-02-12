@@ -3,8 +3,9 @@ import { Inter, Lexend, Fira_Code } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { Header } from '@/components/layout/header';
-import { useAuthStore } from '@/stores/authStore';
+import { ClientSidebarWrapper } from '@/components/layout/client-sidebar-wrapper';
 import { AuthInitializer } from '@/components/auth/authInitializer';
+import { cn } from '@/lib/utils';
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -60,14 +61,22 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <body 
-        className={`${inter.variable} ${lexend.variable} ${firaCode.variable} font-sans antialiased`}
+        className={cn(
+          `${inter.variable} ${lexend.variable} ${firaCode.variable} font-sans antialiased`,
+          'min-h-screen bg-background'
+        )}
       >
         <AuthInitializer />
         <Providers>
-          <Header />
-          <main className="min-h-screen">
-            {children}
-          </main>
+          <div className="flex flex-col min-h-screen">
+            <Header />
+            <div className="flex flex-1">
+              <ClientSidebarWrapper />
+              <main className="flex-1 p-6 lg:p-8">
+                {children}
+              </main>
+            </div>
+          </div>
         </Providers>
       </body>
     </html>

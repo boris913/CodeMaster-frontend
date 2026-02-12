@@ -143,15 +143,13 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      // Charger le profil utilisateur
       loadUser: async () => {
         try {
           const user = await authApi.me();
-          set({ user });
+          set({ user, isAuthenticated: true });
         } catch (error) {
-          console.error('Erreur lors du chargement du profil:', error);
+          console.error('Session expirée ou invalide');
           set({ user: null, isAuthenticated: false });
-          get().clearTokens();
         }
       },
 

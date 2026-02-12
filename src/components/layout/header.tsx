@@ -2,19 +2,35 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
-import { 
-  Moon, 
-  Sun, 
-  Menu, 
-  X, 
-  Bell, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Moon,
+  Sun,
+  Menu,
+  X,
+  Bell,
   Search,
   BookOpen,
-  Home
+  Home,
+  User,
+  Settings,
+  LogOut,
+  LayoutDashboard,
+  GraduationCap,
+  Users,
+  BarChart3,
+  PlusCircle,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
@@ -23,21 +39,39 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const { isAuthenticated, user, logout } = useAuthStore();
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Ne pas afficher le header sur les pages d'authentification
+  if (pathname?.startsWith('/login') || 
+      pathname?.startsWith('/register') || 
+      pathname?.startsWith('/forgot-password') || 
+      pathname?.startsWith('/reset-password')) {
+    return null;
+  }
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
-  const toggleMobileMenu = () => {
-    setMobileMenuOpen(!mobileMenuOpen);
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/courses?search=${encodeURIComponent(searchQuery)}`);
+    }
   };
 
   const navItems = [
     { href: '/', label: 'Accueil', icon: <Home className="w-4 h-4" /> },
     { href: '/courses', label: 'Cours', icon: <BookOpen className="w-4 h-4" /> },
-    { href: '/community', label: 'Communauté', icon: <Bell className="w-4 h-4" /> },
+    { href: '/community', label: 'Communauté', icon: <Users className="w-4 h-4" /> },
   ];
+
+  if (isAuthenticated) {
+    navItems.push({ href: '/my-courses', label: 'Mes cours', icon: <GraduationCap className="w-4 h-4" /> });
+    navItems.push({ href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> });
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -74,13 +108,15 @@ export function Header() {
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-4">
             {/* Search */}
-            <div className="relative">
+            <form onSubmit={handleSearch} className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Rechercher un cours..."
                 className="pl-9 w-64"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
-            </div>
+            </form>
 
             {/* Theme Toggle */}
             <Button
@@ -96,16 +132,18 @@ export function Header() {
 
             {/* Notifications */}
             {isAuthenticated && (
-              <Button variant="ghost" size="icon" className="rounded-full relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive"></span>
+              <Button variant="ghost" size="icon" className="rounded-full relative" asChild>
+                <Link href="/dashboard/notifications">
+                  <Bell className="h-5 w-5" />
+                  {/* <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive"></span> */}
+                </Link>
               </Button>
             )}
 
             {/* User Menu */}
             {isAuthenticated ? (
-              <div className="flex items-center gap-3">
-                <Link href="/dashboard">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="gap-2">
                     <Avatar className="h-8 w-8">
                       {user?.avatar ? (
@@ -118,8 +156,91 @@ export function Header() {
                     </Avatar>
                     <span className="hidden lg:inline">{user?.username}</span>
                   </Button>
-                </Link>
-              </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Mon compte</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard/profile">
+                      <User className="mr-2 h-4 w-4" />
+                      Profil
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard">
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      Dashboard
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/my-courses">
+                      <GraduationCap className="mr-2 h-4 w-4" />
+                      Mes cours
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard/settings">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Paramètres
+                    </Link>
+                  </DropdownMenuItem>
+                  
+                  {user?.role === 'INSTRUCTOR' || user?.role === 'ADMIN' ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Instructeur</DropdownMenuLabel>
+                      <DropdownMenuItem asChild>
+                        <Link href="/instructor/courses">
+                          <BookOpen className="mr-2 h-4 w-4" />
+                          Mes cours
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/courses/create">
+                          <PlusCircle className="mr-2 h-4 w-4" />
+                          Créer un cours
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+
+                  {user?.role === 'ADMIN' ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Administration</DropdownMenuLabel>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin">
+                          <BarChart3 className="mr-2 h-4 w-4" />
+                          Dashboard Admin
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/users">
+                          <Users className="mr-2 h-4 w-4" />
+                          Utilisateurs
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/courses">
+                          <BookOpen className="mr-2 h-4 w-4" />
+                          Cours
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/settings">
+                          <Settings className="mr-2 h-4 w-4" />
+                          Paramètres
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => logout()}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Déconnexion
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <div className="flex items-center gap-2">
                 <Link href="/login">
@@ -139,7 +260,7 @@ export function Header() {
             variant="ghost"
             size="icon"
             className="md:hidden"
-            onClick={toggleMobileMenu}
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? (
               <X className="h-6 w-6" />
@@ -172,9 +293,24 @@ export function Header() {
               <div className="pt-4 border-t space-y-3">
                 {isAuthenticated ? (
                   <>
-                    <Link href="/dashboard" className="block">
+                    <div className="flex items-center gap-3 px-2 py-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback>
+                          {user?.username?.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="font-medium">{user?.username}</span>
+                    </div>
+                    <Link href="/dashboard/profile" className="block">
                       <Button variant="ghost" className="w-full justify-start">
-                        Dashboard
+                        <User className="mr-2 h-4 w-4" />
+                        Profil
+                      </Button>
+                    </Link>
+                    <Link href="/dashboard/settings" className="block">
+                      <Button variant="ghost" className="w-full justify-start">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Paramètres
                       </Button>
                     </Link>
                     <Button 
@@ -185,6 +321,7 @@ export function Header() {
                         setMobileMenuOpen(false);
                       }}
                     >
+                      <LogOut className="mr-2 h-4 w-4" />
                       Déconnexion
                     </Button>
                   </>

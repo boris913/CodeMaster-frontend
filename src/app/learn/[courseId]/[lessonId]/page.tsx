@@ -271,7 +271,7 @@ export default function LearningPage() {
               <ProgressTracker
                 modules={modules}
                 currentLessonId={lessonId as string}
-                onLessonSelect={(id: string) => router.push(`/learning/${courseId}/${id}`)}
+                onLessonSelect={(id: string) => router.push(`/learn/${courseId}/${id}`)}
               />
             </div>
           </div>
@@ -406,7 +406,7 @@ export default function LearningPage() {
                       asChild
                       disabled={!prevLesson}
                     >
-                      <Link href={prevLesson ? `/learning/${courseId}/${prevLesson.id}` : '#'}>
+                      <Link href={prevLesson ? `/learn/${courseId}/${prevLesson.id}` : '#'}>
                         <ChevronLeft className="mr-2 h-4 w-4" />
                         Précédent
                       </Link>
@@ -417,7 +417,7 @@ export default function LearningPage() {
                       asChild
                       disabled={!nextLesson}
                     >
-                      <Link href={nextLesson ? `/learning/${courseId}/${nextLesson.id}` : '#'}>
+                      <Link href={nextLesson ? `/learn/${courseId}/${nextLesson.id}` : '#'}>
                         Suivant
                         <ChevronRight className="ml-2 h-4 w-4" />
                       </Link>

@@ -15,8 +15,12 @@ import {
   BarChart3,
   GraduationCap,
   Clock,
-  Bookmark
+  Bookmark,
+  Award,
+  Heart,
+  Target
 } from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
 
 interface SidebarProps {
   isCollapsed?: boolean;
@@ -25,6 +29,7 @@ interface SidebarProps {
 
 export function Sidebar({ isCollapsed = false, onCollapse }: SidebarProps) {
   const pathname = usePathname();
+  const { user } = useAuthStore();
 
   const navItems = [
     {
@@ -53,10 +58,34 @@ export function Sidebar({ isCollapsed = false, onCollapse }: SidebarProps) {
     },
   ];
 
+  // Si instructeur, ajouter section instructeur
+  if (user?.role === 'INSTRUCTOR' || user?.role === 'ADMIN') {
+    navItems.push({
+      title: 'Instructeur',
+      items: [
+        { href: '/instructor/courses', label: 'Mes cours', icon: BookOpen },
+        { href: '/courses/create', label: 'Créer un cours', icon: Target },
+      ],
+    });
+  }
+
+  // Si admin, ajouter section admin
+  if (user?.role === 'ADMIN') {
+    navItems.push({
+      title: 'Administration',
+      items: [
+        { href: '/admin', label: 'Dashboard', icon: BarChart3 },
+        { href: '/admin/users', label: 'Utilisateurs', icon: User },
+        { href: '/admin/courses', label: 'Cours', icon: BookOpen },
+        { href: '/admin/settings', label: 'Paramètres', icon: Settings },
+      ],
+    });
+  }
+
   return (
     <aside
       className={cn(
-        'flex flex-col border-r bg-card transition-all duration-300',
+        'flex flex-col border-r bg-card transition-all duration-300 h-full',
         isCollapsed ? 'w-16' : 'w-64'
       )}
     >
@@ -75,7 +104,7 @@ export function Sidebar({ isCollapsed = false, onCollapse }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-6">
+      <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
         {navItems.map((section) => (
           <div key={section.title}>
             {!isCollapsed && (
@@ -110,27 +139,6 @@ export function Sidebar({ isCollapsed = false, onCollapse }: SidebarProps) {
           </div>
         ))}
       </nav>
-
-      {/* Stats Summary (when not collapsed) */}
-      {!isCollapsed && (
-        <div className="p-4 border-t">
-          <div className="rounded-lg bg-primary/5 p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted-foreground">Progression</span>
-              <span className="text-sm font-medium">65%</span>
-            </div>
-            <div className="h-1.5 w-full bg-primary/20 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-primary rounded-full transition-all duration-500"
-                style={{ width: '65%' }}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              3/5 cours terminés
-            </p>
-          </div>
-        </div>
-      )}
     </aside>
   );
 }

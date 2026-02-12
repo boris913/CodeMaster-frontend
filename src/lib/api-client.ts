@@ -13,6 +13,8 @@ export interface ApiResponse<T = any> {
 class ApiClient {
   private client: AxiosInstance;
   private static instance: ApiClient;
+  private isRefreshing = false;
+  private failedQueue: any[] = [];
 
   private constructor() {
     this.client = axios.create({
@@ -33,6 +35,17 @@ class ApiClient {
     return ApiClient.instance;
   }
 
+  private processQueue(error: any, token: string | null = null) {
+    this.failedQueue.forEach((prom) => {
+      if (error) {
+        prom.reject(error);
+      } else {
+        prom.resolve(token);
+      }
+    });
+    this.failedQueue = [];
+  }
+
   private setupInterceptors(): void {
     // Request interceptor
     this.client.interceptors.request.use(
@@ -46,30 +59,56 @@ class ApiClient {
       (error) => Promise.reject(error)
     );
 
-    // Response interceptor
+    // Response interceptor avec logique de Queue
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
         const originalRequest = error.config;
 
         if (error.response?.status === 401 && !originalRequest._retry) {
+          if (this.isRefreshing) {
+            // Si un refresh est déjà en cours, on met la requête en attente
+            return new Promise((resolve, reject) => {
+              this.failedQueue.push({ resolve, reject });
+            })
+              .then((token) => {
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+                return this.client(originalRequest);
+              })
+              .catch((err) => Promise.reject(err));
+          }
+
           originalRequest._retry = true;
+          this.isRefreshing = true;
 
           try {
             const refreshToken = this.getRefreshToken();
-            if (refreshToken) {
-              const { data } = await this.client.post('/auth/refresh', {
-                refreshToken,
-              });
+            if (!refreshToken) throw new Error('No refresh token available');
 
-              this.setTokens(data.accessToken, data.refreshToken);
-              originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
-              return this.client(originalRequest);
-            }
+            // Appel direct à l'API de refresh via axios pour éviter les boucles
+            const { data } = await axios.post(`${this.client.defaults.baseURL}/auth/refresh`, {
+              refreshToken,
+            });
+
+            const { accessToken, refreshToken: newRefreshToken } = data;
+            
+            this.setTokens(accessToken, newRefreshToken);
+            
+            // On traite la file d'attente avec le nouveau token
+            this.processQueue(null, accessToken);
+
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+            return this.client(originalRequest);
           } catch (refreshError) {
+            this.processQueue(refreshError, null);
             this.clearTokens();
-            window.location.href = '/login';
+            
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login';
+            }
             return Promise.reject(refreshError);
+          } finally {
+            this.isRefreshing = false;
           }
         }
 
@@ -106,45 +145,26 @@ class ApiClient {
     }
   }
 
-  async get<T = any>(
-    url: string,
-    config?: AxiosRequestConfig
-  ): Promise<AxiosResponse<T>> {
+  async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.get<T>(url, config);
   }
 
-  async post<T = any>(
-    url: string,
-    data?: any,
-    config?: AxiosRequestConfig
-  ): Promise<AxiosResponse<T>> {
+  async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.post<T>(url, data, config);
   }
 
-  async put<T = any>(
-    url: string,
-    data?: any,
-    config?: AxiosRequestConfig
-  ): Promise<AxiosResponse<T>> {
+  async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.put<T>(url, data, config);
   }
 
-  async patch<T = any>(
-    url: string,
-    data?: any,
-    config?: AxiosRequestConfig
-  ): Promise<AxiosResponse<T>> {
+  async patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.patch<T>(url, data, config);
   }
 
-  async delete<T = any>(
-    url: string,
-    config?: AxiosRequestConfig
-  ): Promise<AxiosResponse<T>> {
+  async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.delete<T>(url, config);
   }
 
-  // Helper pour télécharger des fichiers
   async uploadFile(url: string, file: File, fieldName = 'file'): Promise<AxiosResponse> {
     const formData = new FormData();
     formData.append(fieldName, file);

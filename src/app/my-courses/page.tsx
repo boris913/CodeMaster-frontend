@@ -205,7 +205,7 @@ export default function MyCoursesPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => router.push(`/courses/${enrollment.course.slug}`)}
+                              onClick={() => router.push(`/courses/by-slug/${enrollment.course.slug}`)}
                             >
                               Détails
                             </Button>

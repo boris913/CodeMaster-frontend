@@ -72,7 +72,7 @@ export default function CourseDetailPage() {
         title: 'Inscription réussie',
         description: 'Vous êtes maintenant inscrit à ce cours',
       });
-      router.push(`/learning/${course?.id}/start`);
+      router.push(`/learn/${course?.id}/start`);
     },
     onError: (error: any) => {
       toast({
@@ -376,7 +376,7 @@ export default function CourseDetailPage() {
                             asChild
                             disabled={!isEnrolled}
                           >
-                            <Link href={`/learning/${course.id}/${lesson.id}`}>
+                            <Link href={`/learn/${course.id}/${lesson.id}`}>
                               <Play className="h-4 w-4" />
                             </Link>
                           </Button>
