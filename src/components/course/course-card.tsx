@@ -60,7 +60,7 @@ export function CourseCard({
   const thumbnailUrl = getThumbnailUrl(course.thumbnail);
 
   return (
-    <Link href={`/courses/${course.slug}`}>
+    <Link href={`/courses/by-slug/${course.slug}`}>
       <article
         className={cn(
           'group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-all duration-300',

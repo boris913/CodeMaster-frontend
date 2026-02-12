@@ -26,9 +26,9 @@ import {
   GripVertical,
   Settings,
   BookOpen,
-  Clock,
-  Tag,
-  X
+  // Clock,
+  Tag
+  // X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -206,7 +206,7 @@ export default function EditCoursePage() {
         <div className="flex gap-2">
           <Button
             variant="outline"
-            onClick={() => router.push(`/courses/${course.slug}`)}
+            onClick={() => router.push(`/courses/by-slug/${course.slug}`)}
           >
             <Eye className="mr-2 h-4 w-4" />
             Prévisualiser
@@ -372,7 +372,7 @@ export default function EditCoursePage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push(`/courses/${courseId}/modules/new`)}
+                    onClick={() => router.push(`/courses/by-id/${courseId}/modules/new`)}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Ajouter un module
@@ -438,7 +438,7 @@ export default function EditCoursePage() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => router.push(`/courses/${courseId}/modules/${module.id}`)}
+                                        onClick={() => router.push(`/courses/by-id/${courseId}/modules/${module.id}`)}
                                       >
                                         Gérer
                                       </Button>
@@ -520,13 +520,13 @@ export default function EditCoursePage() {
                 <div className="grid gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => router.push(`/courses/${courseId}/analytics`)}
+                    onClick={() => router.push(`/courses/by-id/${courseId}/analytics`)}
                   >
                     Voir les statistiques
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => router.push(`/courses/${courseId}/enrollments`)}
+                    onClick={() => router.push(`/courses/by-id/${courseId}/enrollments`)}
                   >
                     Gérer les inscriptions
                   </Button>

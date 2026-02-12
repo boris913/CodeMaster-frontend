@@ -81,7 +81,7 @@ export default function CreateLessonPage() {
         title: 'Leçon créée',
         description: 'La leçon a été créée avec succès',
       });
-      router.push(`/courses/${courseId}/modules/${moduleId}`);
+      router.push(`/courses/by-id/${courseId}/modules/${moduleId}`);
     },
     onError: (error: any) => {
       setError(error.message || 'Erreur lors de la création de la leçon');
@@ -138,7 +138,7 @@ export default function CreateLessonPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => router.push(`/courses/${courseId}/modules/${moduleId}`)}
+            onClick={() => router.push(`/courses/by-id/${courseId}/modules/${moduleId}`)}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Retour au module

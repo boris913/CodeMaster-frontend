@@ -111,7 +111,7 @@ export default function CourseProgressPage() {
     <div className="container py-10">
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
-          <Link href={`/courses/${course.slug}`} className="text-primary hover:underline">
+          <Link href={`/courses/by-slug/${course.slug}`} className="text-primary hover:underline">
             Cours
           </Link>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />

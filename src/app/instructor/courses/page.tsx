@@ -236,7 +236,7 @@ export default function InstructorCoursesPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => router.push(`/courses/${course.slug}`)}
+                          onClick={() => router.push(`/courses/by-slug/${course.slug}`)}
                         >
                           <Eye className="mr-2 h-4 w-4" />
                           Voir
@@ -244,7 +244,7 @@ export default function InstructorCoursesPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => router.push(`/courses/${course.id}/edit`)}
+                          onClick={() => router.push(`/courses/by-id/${course.id}/edit`)}
                         >
                           <Edit className="mr-2 h-4 w-4" />
                           Éditer
@@ -252,7 +252,7 @@ export default function InstructorCoursesPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => router.push(`/courses/${course.id}/analytics`)}
+                          onClick={() => router.push(`/courses/by-id/${course.id}/analytics`)}
                         >
                           <BarChart3 className="mr-2 h-4 w-4" />
                           Stats

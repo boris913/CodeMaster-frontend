@@ -343,7 +343,7 @@ export default function ModulesManagementPage() {
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() => router.push(`/courses/${courseId}/modules/${module.id}/lessons/create`)}
+                    onClick={() => router.push(`/courses/by-id/${courseId}/modules/${module.id}/lessons/create`)}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Ajouter une leçon

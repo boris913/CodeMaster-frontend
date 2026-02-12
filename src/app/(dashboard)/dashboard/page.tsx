@@ -362,7 +362,7 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <Button asChild variant="ghost" size="sm">
-                          <Link href={`/courses/${course.id}/edit`}>
+                          <Link href={`/courses/by-id/${course.id}/edit`}>
                             <Edit className="h-4 w-4" />
                           </Link>
                         </Button>
