@@ -159,8 +159,17 @@ export const coursesApi = {
     return response.data;
   },
 
-  // Récupérer les cours d'un utilisateur courant
+  // Récupérer les cours de l'utilisateur connecté (instructeur)
+  getMyCourses: async (filters: CourseFilters = {}): Promise<PaginatedResponse<Course>> => {
+    const response = await apiClient.get<PaginatedResponse<Course>>('/courses/my-courses', {
+      params: filters,
+    });
+    return response.data;
+  },
+
+  // [DEPRECATED] Utiliser getMyCourses à la place
   getByInstructor: async (instructorId: string, filters: CourseFilters = {}): Promise<PaginatedResponse<Course>> => {
+    console.warn('getByInstructor is deprecated. Use getMyCourses instead.');
     const response = await apiClient.get<PaginatedResponse<Course>>('/courses/my-courses', {
       params: { ...filters, instructorId },
     });
@@ -216,20 +225,20 @@ export const coursesApi = {
     return response.data;
   },
 
-    // Créer un cours
-    create: async (data: CreateCourseData): Promise<Course> => {
-      const response = await apiClient.post<Course>('/courses', data);
-      return response.data;
-    },
-  
-    // Mettre à jour un cours
-    update: async (courseId: string, data: UpdateCourseData): Promise<Course> => {
-      const response = await apiClient.patch<Course>(`/courses/${courseId}`, data);
-      return response.data;
-    },
-  
-    // Supprimer un cours
-    delete: async (courseId: string): Promise<void> => {
-      await apiClient.delete(`/courses/${courseId}`);
-    },
+  // Créer un cours
+  create: async (data: CreateCourseData): Promise<Course> => {
+    const response = await apiClient.post<Course>('/courses', data);
+    return response.data;
+  },
+
+  // Mettre à jour un cours
+  update: async (courseId: string, data: UpdateCourseData): Promise<Course> => {
+    const response = await apiClient.patch<Course>(`/courses/${courseId}`, data);
+    return response.data;
+  },
+
+  // Supprimer un cours
+  delete: async (courseId: string): Promise<void> => {
+    await apiClient.delete(`/courses/${courseId}`);
+  },
 };

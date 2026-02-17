@@ -20,14 +20,18 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react'],
   },
   async rewrites() {
+    // Extraire l'origine de l'API
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    let apiOrigin = 'http://localhost:5000';
+    try {
+      apiOrigin = new URL(apiUrl).origin;
+    } catch {}
+
     return [
-      {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL}/api/:path*`,
-      },
+      // Réécriture UNIQUEMENT pour les fichiers statiques
       {
         source: '/uploads/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL}/uploads/:path*`,
+        destination: `${apiOrigin}/uploads/:path*`,
       },
     ];
   },

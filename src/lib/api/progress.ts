@@ -63,6 +63,25 @@ export interface RecentActivity {
   updatedAt: string;
 }
 
+export interface LessonProgress {
+  id?: string;
+  userId: string;
+  lessonId: string;
+  completed: boolean;
+  completedAt?: string;
+  timeSpent: number;
+  lastPosition?: number;
+  lesson?: {
+    id: string;
+    title: string;
+    module: {
+      id: string;
+      title: string;
+      courseId: string;
+    };
+  };
+}
+
 export const progressApi = {
   // Récupérer la progression de l'utilisateur
   getUserProgress: async (courseId?: string): Promise<any[]> => {
@@ -91,7 +110,7 @@ export const progressApi = {
     return response.data;
   },
 
-  // Récupérer les activités récentes - CORRECTION DE L'ENDPOINT
+  // Récupérer les activités récentes
   getRecentActivity: async (limit: number = 10): Promise<RecentActivity[]> => {
     const response = await apiClient.get<RecentActivity[]>('/progress/recent', {
       params: { limit },
@@ -107,9 +126,9 @@ export const progressApi = {
     return response.data;
   },
 
-  // Récupérer la progression d'une leçon
-  getLessonProgress: async (lessonId: string): Promise<any> => {
-    const response = await apiClient.get(`/progress/lesson/${lessonId}`);
+  // Récupérer la progression d'une leçon spécifique
+  getLessonProgress: async (lessonId: string): Promise<LessonProgress> => {
+    const response = await apiClient.get<LessonProgress>(`/progress/lesson/${lessonId}`);
     return response.data;
   },
 };

@@ -66,6 +66,16 @@ export interface UserEnrollment {
   };
 }
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 export const usersApi = {
   // Récupérer le profil de l'utilisateur connecté
   me: async (): Promise<UserProfile> => {
@@ -125,40 +135,41 @@ export const usersApi = {
     return response.data;
   },
 
-    // Rechercher des utilisateurs (admin seulement)
-    search: async (query: string, page: number = 1, limit: number = 20): Promise<any> => {
-      const response = await apiClient.get(`/users/search`, {
-        params: { query, page, limit },
-      });
-      return response.data;
-    },
-  
-    // Mettre à jour le rôle d'un utilisateur (admin seulement)
-    updateRole: async (userId: string, data: { role: 'STUDENT' | 'INSTRUCTOR' | 'ADMIN' }): Promise<UserProfile> => {
-      const response = await apiClient.patch<UserProfile>(`/users/${userId}/role`, data);
-      return response.data;
-    },
-  
-    // Désactiver/réactiver un compte (admin seulement)
-    toggleActiveStatus: async (userId: string, isActive: boolean): Promise<UserProfile> => {
-      const response = await apiClient.patch<UserProfile>(`/users/${userId}/status`, { isActive });
-      return response.data;
-    },
-  
-    // Supprimer définitivement un utilisateur (admin seulement)
-    delete: async (userId: string): Promise<void> => {
-      await apiClient.delete(`/users/${userId}`);
-    },
-  
-    // Vérifier la disponibilité d'un email
-    checkEmail: async (email: string): Promise<{ available: boolean }> => {
-      const response = await apiClient.get<{ available: boolean }>(`/users/check-email/${email}`);
-      return response.data;
-    },
-  
-    // Vérifier la disponibilité d'un nom d'utilisateur
-    checkUsername: async (username: string): Promise<{ available: boolean }> => {
-      const response = await apiClient.get<{ available: boolean }>(`/users/check-username/${username}`);
-      return response.data;
-    },
+  // Rechercher des utilisateurs (admin seulement)
+  search: async (query: string, page: number = 1, limit: number = 20): Promise<PaginatedResponse<UserProfile>> => {
+    const response = await apiClient.get<PaginatedResponse<UserProfile>>('/users', {
+      params: { search: query, page, limit },
+    });
+    return response.data;
+  },
+
+  // Mettre à jour le rôle d'un utilisateur (admin seulement)
+  updateRole: async (userId: string, data: { role?: 'STUDENT' | 'INSTRUCTOR' | 'ADMIN'; isActive?: boolean; emailVerified?: boolean }): Promise<UserProfile> => {
+    const response = await apiClient.patch<UserProfile>(`/users/${userId}/role`, data);
+    return response.data;
+  },
+
+  // Désactiver/réactiver un compte (admin seulement) - Utiliser updateRole à la place
+  // Cette méthode est supprimée car elle n'existe pas dans le backend.
+
+  // Supprimer définitivement un utilisateur (admin seulement)
+  delete: async (userId: string): Promise<void> => {
+    await apiClient.delete(`/users/${userId}`);
+  },
+
+  // Vérifier la disponibilité d'un email
+  checkEmail: async (email: string): Promise<{ available: boolean }> => {
+    const response = await apiClient.get<{ available: boolean }>(`/users/check-email`, {
+      params: { email },
+    });
+    return response.data;
+  },
+
+  // Vérifier la disponibilité d'un nom d'utilisateur
+  checkUsername: async (username: string): Promise<{ available: boolean }> => {
+    const response = await apiClient.get<{ available: boolean }>(`/users/check-username`, {
+      params: { username },
+    });
+    return response.data;
+  },
 };

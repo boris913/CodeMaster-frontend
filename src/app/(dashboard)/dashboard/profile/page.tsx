@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { User, Mail, Upload, X, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getAvatarUrl } from '@/lib/utils/avatar';
 
 const profileSchema = z.object({
   firstName: z.string().optional(),
@@ -263,7 +264,7 @@ export default function ProfilePage() {
             <CardContent className="space-y-6">
               <div className="flex items-center gap-6">
                 <Avatar className="h-24 w-24">
-                  <AvatarImage src={previewUrl || profileData?.avatar} />
+                  <AvatarImage src={previewUrl || getAvatarUrl(profileData?.avatar)} />
                   <AvatarFallback>
                     <User className="h-12 w-12" />
                   </AvatarFallback>

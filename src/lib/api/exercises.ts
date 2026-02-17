@@ -1,5 +1,7 @@
 import { apiClient } from '@/lib/api-client';
 
+export type Language = 'JAVASCRIPT' | 'TYPESCRIPT' | 'PYTHON' | 'HTML' | 'CSS' | 'JAVA' | 'CPP';
+
 export interface Exercise {
   id: string;
   title: string;
@@ -7,7 +9,7 @@ export interface Exercise {
   starterCode: string;
   solution: string;
   tests: string;
-  language: 'JAVASCRIPT' | 'TYPESCRIPT' | 'PYTHON' | 'HTML' | 'CSS' | 'JAVA' | 'CPP';
+  language: Language;
   difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
   hints: string[];
   timeLimit: number;
@@ -40,7 +42,7 @@ export interface Exercise {
 export interface Submission {
   id: string;
   code: string;
-  language: 'JAVASCRIPT' | 'TYPESCRIPT' | 'PYTHON' | 'HTML' | 'CSS' | 'JAVA' | 'CPP';
+  language: Language;
   status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'TIMEOUT' | 'ERROR';
   result?: any;
   executionTime?: number;
@@ -71,7 +73,7 @@ export interface Submission {
 
 export interface SubmitExerciseData {
   code: string;
-  language: 'JAVASCRIPT' | 'TYPESCRIPT' | 'PYTHON' | 'HTML' | 'CSS' | 'JAVA' | 'CPP';
+  language: Language;
   customInput?: string;
 }
 
@@ -81,7 +83,7 @@ export interface CreateExerciseData {
   starterCode: string;
   solution: string;
   tests: string;
-  language: 'JAVASCRIPT' | 'TYPESCRIPT' | 'PYTHON' | 'HTML' | 'CSS' | 'JAVA' | 'CPP';
+  language: Language;
   difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
   hints?: string[];
   timeLimit?: number;
@@ -96,7 +98,7 @@ export interface UpdateExerciseData {
   starterCode?: string;
   solution?: string;
   tests?: string;
-  language?: 'JAVASCRIPT' | 'TYPESCRIPT' | 'PYTHON' | 'HTML' | 'CSS' | 'JAVA' | 'CPP';
+  language?: Language;
   difficulty?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
   hints?: string[];
   timeLimit?: number;
@@ -123,12 +125,6 @@ export const exercisesApi = {
   // Récupérer un exercice par ID
   getById: async (id: string): Promise<Exercise> => {
     const response = await apiClient.get<Exercise>(`/exercises/${id}`);
-    return response.data;
-  },
-
-  // Récupérer un exercice par leçon
-  getByLesson: async (lessonId: string): Promise<Exercise> => {
-    const response = await apiClient.get<Exercise>(`/exercises/lesson/${lessonId}`);
     return response.data;
   },
 
@@ -179,7 +175,7 @@ export const exercisesApi = {
   testExercise: async (
     exerciseId: string,
     code: string,
-    language: 'JAVASCRIPT' | 'TYPESCRIPT' | 'PYTHON' | 'HTML' | 'CSS' | 'JAVA' | 'CPP'
+    language: Language
   ): Promise<ExecutionResult> => {
     const response = await apiClient.post<ExecutionResult>(`/exercises/${exerciseId}/test`, { code, language });
     return response.data;

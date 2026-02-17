@@ -37,6 +37,14 @@ export const commentsApi = {
     return response.data;
   },
 
+  /**
+ * Récupérer un commentaire par son ID
+  */
+  getById: async (id: string): Promise<Comment> => {
+    const response = await apiClient.get<Comment>(`/comments/${id}`);
+    return response.data;
+  },
+
   // Créer un commentaire
   create: async (data: CreateCommentData): Promise<Comment> => {
     const response = await apiClient.post<Comment>('/comments', data);

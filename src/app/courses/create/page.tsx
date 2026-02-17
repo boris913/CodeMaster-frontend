@@ -21,9 +21,7 @@ import {
   Upload, 
   Loader2, 
   BookOpen,
-  Tag,
-  Clock,
-  BarChart3
+  Tag
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -79,7 +77,7 @@ export default function CreateCoursePage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+  
     if (!file.type.startsWith('image/')) {
       toast({
         title: 'Fichier invalide',
@@ -88,7 +86,7 @@ export default function CreateCoursePage() {
       });
       return;
     }
-
+  
     if (file.size > 5 * 1024 * 1024) {
       toast({
         title: 'Fichier trop volumineux',
@@ -97,14 +95,11 @@ export default function CreateCoursePage() {
       });
       return;
     }
-
+  
     setThumbnailFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPreviewUrl(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    setPreviewUrl(URL.createObjectURL(file));
   };
+  
 
   const onSubmit = async (data: CourseFormData) => {
     if (!user) {
@@ -366,57 +361,48 @@ export default function CreateCoursePage() {
             </CardContent>
           </Card>
 
-          <Card>
+            {/* SECTION MINIATURE CORRIGÉE */}
+            <Card>
             <CardHeader>
               <CardTitle>Miniature du cours</CardTitle>
-              <CardDescription>
-                Une image attractive augmente les inscriptions
-              </CardDescription>
+              <CardDescription>Une image attractive augmente les inscriptions</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <Label htmlFor="thumbnail">Télécharger une miniature</Label>
-                  <input
-                    type="file"
-                    id="thumbnail"
-                    accept="image/*"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    disabled={isLoading}
-                  />
-                  <label htmlFor="thumbnail">
-                    <Button
-                      variant="outline"
-                      className="w-full h-32 border-dashed"
-                      type="button"
-                      disabled={isLoading}
-                    >
-                      <div className="flex flex-col items-center gap-2">
-                        <Upload className="h-8 w-8 text-muted-foreground" />
-                        <span className="text-sm">
-                          {thumbnailFile ? thumbnailFile.name : 'Cliquez pour télécharger'}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          PNG, JPG, WebP (max 5 MB)
-                        </span>
-                      </div>
-                    </Button>
-                  </label>
+                <div className="space-y-2">
+                  <Label>Télécharger une miniature</Label>
+                  <div 
+                    onClick={() => document.getElementById('thumbnail')?.click()}
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted transition-colors border-muted-foreground/20"
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                    <span className="text-sm font-medium">
+                      {thumbnailFile ? thumbnailFile.name : 'Cliquez pour télécharger'}
+                    </span>
+                    <span className="text-xs text-muted-foreground">PNG, JPG, WebP (max 5 MB)</span>
+                    <input
+                      type="file"
+                      id="thumbnail"
+                      accept="image/*"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </div>
                 </div>
 
                 {previewUrl && (
-                  <div>
+                  <div className="space-y-2">
                     <Label>Aperçu</Label>
-                    <div className="mt-2 relative aspect-video overflow-hidden rounded-lg border">
+                    <div className="h-48 w-full overflow-hidden rounded-lg border bg-black">
                       <img
                         src={previewUrl}
-                        alt="Aperçu de la miniature"
-                        className="object-cover w-full h-full"
+                        alt="Aperçu"
+                        className="w-full h-full object-cover"
                       />
                     </div>
                   </div>
                 )}
+
               </div>
             </CardContent>
           </Card>
