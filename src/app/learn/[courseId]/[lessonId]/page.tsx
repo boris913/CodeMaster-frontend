@@ -22,6 +22,9 @@ import { lessonsApi } from '@/lib/api/lessons';
 import { progressApi } from '@/lib/api/progress';
 import { commentsApi } from '@/lib/api/comments';
 import { exercisesApi, type Language } from '@/lib/api/exercises';
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import {
   BookOpen,
   Code2,
@@ -73,6 +76,10 @@ export default function LearningPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const commentsEndRef = useRef<HTMLDivElement>(null);
+  // Référence pour l'heure de début
+  const startTimeRef = useRef<number | null>(null);
+  // Flag pour éviter les appels multiples au nettoyage
+  const timeTrackedRef = useRef<boolean>(false);
 
   // Queries
   const { data: course, isLoading: courseLoading } = useQuery({
@@ -117,11 +124,6 @@ export default function LearningPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lesson-progress', lessonId] });
       queryClient.invalidateQueries({ queryKey: ['course-progress', courseId] });
-      toast({
-        title: '🎉 Leçon terminée !',
-        description: 'Félicitations, vous avez terminé cette leçon.',
-        variant: 'default',
-      });
     },
     onError: (error: any) => {
       toast({
@@ -133,7 +135,8 @@ export default function LearningPage() {
   });
 
   const updateProgressMutation = useMutation({
-    mutationFn: (position: number) => lessonsApi.updateVideoPosition(lessonId as string, position),
+    mutationFn: ({ position, timeSpent }: { position?: number; timeSpent?: number }) =>
+      progressApi.updateLessonProgress(lessonId as string, { lastPosition: position, timeSpent }),
     onError: (error) => console.error('Failed to update progress:', error),
   });
 
@@ -171,25 +174,39 @@ export default function LearningPage() {
     },
   });
 
-  // Effet pour rediriger si non authentifié ou si les paramètres sont manquants
+  // Enregistrer l'heure de début au montage
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-      return;
+    if (isAuthenticated && lessonId && !lessonProgress?.completed) {
+      startTimeRef.current = Date.now();
+      timeTrackedRef.current = false;
     }
+
+    // Nettoyage : envoyer le temps passé si la leçon n'est pas terminée
+    return () => {
+      if (startTimeRef.current && !timeTrackedRef.current && !lessonProgress?.completed) {
+        const elapsedSeconds = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        if (elapsedSeconds > 5) { // Ignorer les sessions très courtes
+          updateProgressMutation.mutate({ timeSpent: elapsedSeconds });
+        }
+      }
+    };
+  }, [isAuthenticated, lessonId, lessonProgress?.completed, updateProgressMutation]);
+
+  // Sauvegarde automatique de la position vidéo à la fermeture (inchangé)
+  useEffect(() => {
+    return () => {
+      if (lessonProgress?.lastPosition) {
+        updateProgressMutation.mutate({ position: lessonProgress.lastPosition });
+      }
+    };
+  }, [lessonProgress?.lastPosition, updateProgressMutation]);
+
+  // Redirection si non authentifié
+  useEffect(() => {
     if (!courseId || !lessonId) {
       router.push('/dashboard');
     }
   }, [isAuthenticated, courseId, lessonId, router]);
-
-  // Sauvegarde automatique de la position vidéo à la fermeture
-  useEffect(() => {
-    return () => {
-      if (lessonProgress?.lastPosition) {
-        updateProgressMutation.mutate(lessonProgress.lastPosition);
-      }
-    };
-  }, [lessonProgress?.lastPosition, updateProgressMutation]);
 
   const handleRunCode = async (code: string) => {
     if (!exercise?.id) {
@@ -233,11 +250,42 @@ export default function LearningPage() {
 
   const handleCompleteLesson = async () => {
     if (!lessonId) return;
-    completeLessonMutation.mutate();
+
+    // Calculer le temps passé
+    const elapsedSeconds = startTimeRef.current
+      ? Math.floor((Date.now() - startTimeRef.current) / 1000)
+      : 0;
+
+    try {
+      // Marquer comme terminée
+      await completeLessonMutation.mutateAsync();
+
+      // Envoyer le temps passé (incrément)
+      if (elapsedSeconds > 0) {
+        await updateProgressMutation.mutateAsync({ timeSpent: elapsedSeconds });
+      }
+
+      timeTrackedRef.current = true;
+
+      toast({
+        title: '🎉 Leçon terminée !',
+        description: 'Félicitations, vous avez terminé cette leçon.',
+        variant: 'default',
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['lesson-progress', lessonId] });
+      queryClient.invalidateQueries({ queryKey: ['course-progress', courseId] });
+    } catch (error: any) {
+      toast({
+        title: 'Erreur',
+        description: error.message || 'Impossible de marquer la leçon comme terminée',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleVideoProgress = (position: number) => {
-    updateProgressMutation.mutate(position);
+    updateProgressMutation.mutate({ position });
   };
 
   const handleAddComment = () => {
@@ -371,7 +419,7 @@ export default function LearningPage() {
                     <TooltipTrigger asChild>
                       <Button
                         onClick={handleCompleteLesson}
-                        disabled={completeLessonMutation.isPending}
+                        disabled={completeLessonMutation.isPending || updateProgressMutation.isPending}
                         size="sm"
                       >
                         {completeLessonMutation.isPending ? (
@@ -514,10 +562,13 @@ export default function LearningPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div
+                      <ReactMarkdown
                         className="prose max-w-none dark:prose-invert"
-                        dangerouslySetInnerHTML={{ __html: lesson.content }}
-                      />
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                      >
+                        {lesson.content}
+                      </ReactMarkdown>
                     </CardContent>
                   </Card>
                 </TabsContent>

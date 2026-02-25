@@ -42,6 +42,11 @@ export interface ResetPasswordData {
   confirmPassword: string;
 }
 
+export interface ChangePasswordData {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export const authApi = {
   // Authentification
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
@@ -93,5 +98,9 @@ export const authApi = {
   checkUsername: async (username: string): Promise<{ available: boolean }> => {
     const response = await apiClient.get(`/users/check-username?username=${username}`);
     return response.data;
+  },
+
+  changePassword: async (data: ChangePasswordData): Promise<void> => {
+    await apiClient.post('/auth/change-password', data);
   },
 };

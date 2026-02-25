@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { progressApi } from '@/lib/api/progress';
 import { usersApi } from '@/lib/api/users';
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   BarChart3,
   TrendingUp,
@@ -20,30 +21,174 @@ import {
   BookOpen,
   Code2,
   Users,
-  Activity
+  Activity,
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
 
 export default function StatsPage() {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState('overview');
 
-  const { data: userProgress } = useQuery({
+  // Récupérer toutes les progressions par leçon
+  const { data: allProgress, isLoading: isLoadingProgress, isError: isErrorProgress } = useQuery({
     queryKey: ['user-progress'],
     queryFn: () => progressApi.getUserProgress(),
     enabled: !!user,
   });
 
-  const { data: userStats } = useQuery({
+  const { data: userStats, isLoading: isLoadingStats, isError: isErrorStats } = useQuery({
     queryKey: ['user-stats', user?.id],
     queryFn: () => usersApi.getStats(user?.id || ''),
     enabled: !!user?.id,
   });
 
-  const { data: recentActivity } = useQuery({
+  const { data: recentActivity, isLoading: isLoadingActivity, isError: isErrorActivity } = useQuery({
     queryKey: ['recent-activity-stats'],
     queryFn: () => progressApi.getRecentActivity(20),
     enabled: !!user,
   });
+
+  // Regrouper les progressions par cours
+  const coursesProgress = useMemo(() => {
+    if (!allProgress) return [];
+
+    const coursesMap = new Map();
+    allProgress.forEach(p => {
+      const course = p.lesson?.module?.course;
+      if (!course) return;
+
+      const courseId = course.id;
+      if (!coursesMap.has(courseId)) {
+        coursesMap.set(courseId, {
+          courseId,
+          courseTitle: course.title,
+          lessons: [],
+        });
+      }
+      coursesMap.get(courseId).lessons.push(p);
+    });
+
+    return Array.from(coursesMap.values()).map(course => {
+      const totalLessons = course.lessons.length;
+      const completedLessons = course.lessons.filter(l => l.completed).length;
+      const overallProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+      return {
+        courseId: course.courseId,
+        courseTitle: course.courseTitle,
+        totalLessons,
+        completedLessons,
+        overallProgress,
+      };
+    });
+  }, [allProgress]);
+
+  // Statistiques globales
+  const overallStats = useMemo(() => {
+    const totalCourses = coursesProgress.length;
+    const completedCourses = coursesProgress.filter(c => c.overallProgress === 100).length;
+    const totalTime = allProgress?.reduce((acc, p) => acc + p.timeSpent, 0) || 0;
+    const avgProgress = totalCourses > 0
+      ? coursesProgress.reduce((acc, c) => acc + c.overallProgress, 0) / totalCourses
+      : 0;
+
+    return {
+      totalCourses,
+      completedCourses,
+      totalTime,
+      averageProgress: avgProgress,
+    };
+  }, [coursesProgress, allProgress]);
+
+  // Statistiques de temps
+  const now = new Date();
+  const oneDay = 24 * 60 * 60 * 1000;
+  const oneWeek = 7 * oneDay;
+  const oneMonth = 30 * oneDay;
+
+  const dailyTotal = recentActivity?.filter(a => 
+    new Date(a.updatedAt) > new Date(now.getTime() - oneDay)
+  ).reduce((sum, a) => sum + a.timeSpent, 0) || 0;
+
+  const weeklyTotal = recentActivity?.filter(a => 
+    new Date(a.updatedAt) > new Date(now.getTime() - oneWeek)
+  ).reduce((sum, a) => sum + a.timeSpent, 0) || 0;
+
+  const monthlyTotal = recentActivity?.filter(a => 
+    new Date(a.updatedAt) > new Date(now.getTime() - oneMonth)
+  ).reduce((sum, a) => sum + a.timeSpent, 0) || 0;
+
+  const timeStats = {
+    daily: dailyTotal,
+    weekly: weeklyTotal,
+    monthly: monthlyTotal,
+    total: overallStats.totalTime,
+  };
+
+  // Activité quotidienne pour le graphique
+  const activityByDay: Record<string, number> = {};
+  recentActivity?.forEach(activity => {
+    const date = new Date(activity.updatedAt).toLocaleDateString('fr-FR');
+    activityByDay[date] = (activityByDay[date] || 0) + activity.timeSpent;
+  });
+
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    return d.toLocaleDateString('fr-FR');
+  }).reverse();
+
+  // Badges dynamiques (exemple)
+  const badges = useMemo(() => [
+    {
+      title: 'Premier cours',
+      description: 'Commencer un premier cours',
+      icon: BookOpen,
+      unlocked: coursesProgress.length > 0,
+    },
+    {
+      title: 'Persévérant',
+      description: '10h d\'apprentissage',
+      icon: Clock,
+      unlocked: overallStats.totalTime >= 600, // 10h = 600 minutes
+    },
+    {
+      title: 'Perfectionniste',
+      description: 'Terminer un cours à 100%',
+      icon: Trophy,
+      unlocked: overallStats.completedCourses >= 1,
+    },
+    {
+      title: 'Programmeur',
+      description: 'Réussir 10 exercices',
+      icon: Code2,
+      unlocked: (userStats?.successfulSubmissions || 0) >= 10,
+    },
+    {
+      title: 'Étudiant actif',
+      description: '7 jours consécutifs',
+      icon: Calendar,
+      unlocked: false, // à calculer si on a la série
+    },
+    {
+      title: 'Collaborateur',
+      description: 'Aider 5 étudiants',
+      icon: Users,
+      unlocked: false,
+    },
+    {
+      title: 'Rapide',
+      description: 'Terminer un cours en 3 jours',
+      icon: Target,
+      unlocked: false,
+    },
+    {
+      title: 'Expert',
+      description: '3 cours avancés terminés',
+      icon: Award,
+      unlocked: coursesProgress.filter(c => c.overallProgress === 100).length >= 3,
+    },
+  ], [coursesProgress, overallStats, userStats]);
 
   if (!user) {
     return (
@@ -58,27 +203,25 @@ export default function StatsPage() {
     );
   }
 
-  const overallStats = {
-    totalCourses: userProgress?.length || 0,
-    completedCourses: userProgress?.filter(p => p.overallProgress === 100).length || 0,
-    totalTime: userProgress?.reduce((acc, p) => acc + p.totalTimeSpent, 0) || 0,
-    averageProgress: userProgress?.length 
-      ? userProgress.reduce((acc, p) => acc + p.overallProgress, 0) / userProgress.length 
-      : 0,
-  };
+  if (isLoadingProgress || isLoadingStats || isLoadingActivity) {
+    return (
+      <div className="container py-10 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
-  const timeStats = {
-    daily: 120, // minutes
-    weekly: 840,
-    monthly: 3600,
-    total: overallStats.totalTime,
-  };
-
-  const activityByDay: Record<string, number> = {};
-  recentActivity?.forEach(activity => {
-    const date = new Date(activity.updatedAt).toLocaleDateString('fr-FR');
-    activityByDay[date] = (activityByDay[date] || 0) + activity.timeSpent;
-  });
+  if (isErrorProgress || isErrorStats || isErrorActivity) {
+    return (
+      <div className="container py-10">
+        <Alert variant="destructive">
+          <AlertDescription>
+            Erreur lors du chargement des statistiques. Veuillez réessayer.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="container py-10">
@@ -172,10 +315,10 @@ export default function StatsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {userProgress?.map((course) => (
+                {coursesProgress.map((course) => (
                   <div key={course.courseId} className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-medium">{course.courseId}</span>
+                      <span className="font-medium">{course.courseTitle}</span>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">
                           {course.completedLessons}/{course.totalLessons} leçons
@@ -261,9 +404,9 @@ export default function StatsPage() {
                   <div className="pt-4 border-t">
                     <h4 className="font-medium mb-4">Activité quotidienne (derniers 7 jours)</h4>
                     <div className="flex items-end h-32 gap-1">
-                      {Object.entries(activityByDay)
-                        .slice(0, 7)
-                        .map(([date, minutes]) => (
+                      {last7Days.map(date => {
+                        const minutes = activityByDay[date] || 0;
+                        return (
                           <div key={date} className="flex-1 flex flex-col items-center">
                             <div 
                               className="w-full bg-primary rounded-t"
@@ -273,7 +416,8 @@ export default function StatsPage() {
                               {date.split('/')[0]}/{date.split('/')[1]}
                             </div>
                           </div>
-                        ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -336,25 +480,18 @@ export default function StatsPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* Badges */}
-                  {[
-                    { title: 'Premier cours', description: 'Commencer un premier cours', icon: BookOpen },
-                    { title: 'Persévérant', description: '10h d\'apprentissage', icon: Clock },
-                    { title: 'Perfectionniste', description: 'Terminer un cours à 100%', icon: Trophy },
-                    { title: 'Programmeur', description: 'Réussir 10 exercices', icon: Code2 },
-                    { title: 'Étudiant actif', description: '7 jours consécutifs', icon: Calendar },
-                    { title: 'Collaborateur', description: 'Aider 5 étudiants', icon: Users },
-                    { title: 'Rapide', description: 'Terminer un cours en 3 jours', icon: Target },
-                    { title: 'Expert', description: '3 cours avancés terminés', icon: Award },
-                  ].map((badge, index) => (
-                    <div key={index} className="text-center">
-                      <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
-                        <badge.icon className="h-8 w-8 text-primary" />
+                  {badges.map((badge, index) => {
+                    const Icon = badge.icon;
+                    return (
+                      <div key={index} className={`text-center ${badge.unlocked ? 'opacity-100' : 'opacity-40'}`}>
+                        <div className={`h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-2 ${badge.unlocked ? 'bg-primary/10' : 'bg-muted'}`}>
+                          <Icon className={`h-8 w-8 ${badge.unlocked ? 'text-primary' : 'text-muted-foreground'}`} />
+                        </div>
+                        <div className="font-medium">{badge.title}</div>
+                        <div className="text-xs text-muted-foreground">{badge.description}</div>
                       </div>
-                      <div className="font-medium">{badge.title}</div>
-                      <div className="text-xs text-muted-foreground">{badge.description}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>

@@ -3,33 +3,95 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useQuery } from '@tanstack/react-query';
+import { adminApi } from '@/lib/api/admin';
+import { progressApi } from '@/lib/api/progress';
+import Link from 'next/link';
 import { 
   Users,
   BookOpen,
   TrendingUp,
   DollarSign,
   BarChart3,
-  Clock,
-  Shield,
   Settings,
-  AlertCircle
+  AlertCircle,
+  Loader2,
+  Clock
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
-  const stats = [
-    { label: 'Utilisateurs actifs', value: '2,458', change: '+12%', icon: Users, color: 'bg-blue-500/10 text-blue-500' },
-    { label: 'Cours publiés', value: '156', change: '+5%', icon: BookOpen, color: 'bg-green-500/10 text-green-500' },
-    { label: 'Revenus mensuels', value: '€12,458', change: '+18%', icon: DollarSign, color: 'bg-yellow-500/10 text-yellow-500' },
-    { label: 'Taux de complétion', value: '68%', change: '+3%', icon: TrendingUp, color: 'bg-purple-500/10 text-purple-500' },
+  const { data: stats, isLoading: statsLoading, isError: statsError } = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: () => adminApi.getStats(),
+  });
+
+  const { data: activities, isLoading: activitiesLoading } = useQuery({
+    queryKey: ['admin-recent-activities'],
+    queryFn: () => progressApi.getAdminRecentActivities(10),
+  });
+
+  const isLoading = statsLoading || activitiesLoading;
+
+  if (isLoading) {
+    return (
+      <div className="container py-10 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (statsError || !stats) {
+    return (
+      <div className="container py-10">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
+            <h3 className="mt-4 text-lg font-medium">Erreur de chargement</h3>
+            <p className="text-muted-foreground mt-2">
+              Impossible de charger les statistiques. Veuillez réessayer.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const statCards = [
+    { 
+      label: 'Utilisateurs actifs', 
+      value: stats.activeUsers.toLocaleString(), 
+      icon: Users, 
+      color: 'bg-blue-500/10 text-blue-500' 
+    },
+    { 
+      label: 'Cours publiés', 
+      value: stats.publishedCourses.toLocaleString(), 
+      icon: BookOpen, 
+      color: 'bg-green-500/10 text-green-500' 
+    },
+    { 
+      label: 'Revenus mensuels', 
+      value: stats.monthlyRevenue.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }), 
+      icon: DollarSign, 
+      color: 'bg-yellow-500/10 text-yellow-500' 
+    },
+    {
+      label: 'Taux de complétion',
+      value: `${Math.round((stats.completedEnrollments / stats.totalEnrollments) * 100) || 0}%`,
+      icon: TrendingUp,
+      color: 'bg-purple-500/10 text-purple-500'
+    },
   ];
 
-  const recentActivities = [
-    { user: 'Jean Dupont', action: 'a terminé le cours JavaScript', time: '5 min ago' },
-    { user: 'Marie Martin', action: 's\'est inscrite à React Avancé', time: '12 min ago' },
-    { user: 'Admin System', action: 'a publié un nouveau cours', time: '30 min ago' },
-    { user: 'Pierre Bernard', action: 'a soumis un exercice', time: '1h ago' },
-    { user: 'Sophie Laurent', action: 'a signalé un problème', time: '2h ago' },
-  ];
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'lesson_completed': return BookOpen;
+      case 'course_enrolled': return Users;
+      case 'exercise_submitted': return TrendingUp;
+      case 'course_completed': return BookOpen;
+      default: return Clock;
+    }
+  };
 
   return (
     <div className="container py-10">
@@ -42,7 +104,7 @@ export default function AdminDashboardPage() {
 
       {/* Statistiques */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        {stats.map((stat) => {
+        {statCards.map((stat) => {
           const Icon = stat.icon;
           return (
             <Card key={stat.label}>
@@ -75,20 +137,25 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentActivities.map((activity, index) => (
-                  <div key={index} className="flex items-center gap-3 p-3 border rounded-lg">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Users className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <div>
-                        <span className="font-medium">{activity.user}</span>
-                        <span className="text-muted-foreground"> {activity.action}</span>
+                {activities?.map((activity) => {
+                  const Icon = getActivityIcon(activity.type);
+                  return (
+                    <div key={activity.id} className="flex items-center gap-3 p-3 border rounded-lg">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Icon className="h-5 w-5 text-primary" />
                       </div>
-                      <div className="text-sm text-muted-foreground">{activity.time}</div>
+                      <div className="flex-1">
+                        <div>
+                          <span className="font-medium">{activity.username}</span>
+                          <span className="text-muted-foreground"> {activity.description}</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {new Date(activity.createdAt).toLocaleString('fr-FR')}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -104,21 +171,29 @@ export default function AdminDashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-start">
-                <Users className="mr-2 h-4 w-4" />
-                Gérer les utilisateurs
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/admin/users">
+                  <Users className="mr-2 h-4 w-4" />
+                  Gérer les utilisateurs
+                </Link>
               </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <BookOpen className="mr-2 h-4 w-4" />
-                Gérer les cours
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/admin/courses">
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  Gérer les cours
+                </Link>
               </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <BarChart3 className="mr-2 h-4 w-4" />
-                Voir les analyses
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/admin/analytics">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  Voir les analyses
+                </Link>
               </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <Settings className="mr-2 h-4 w-4" />
-                Paramètres système
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/admin/settings">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Paramètres système
+                </Link>
               </Button>
             </CardContent>
           </Card>

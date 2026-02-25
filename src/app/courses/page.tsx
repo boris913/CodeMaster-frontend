@@ -33,13 +33,14 @@ export default function CoursesPage() {
   
   const debouncedSearch = useDebounce(search, 500);
 
-  const { data: coursesData, isLoading } = useQuery({
+  const { data: coursesData, isLoading, isError, error } = useQuery({
     queryKey: ['courses', filters, debouncedSearch, category],
     queryFn: () => coursesApi.getAll({
       ...filters,
       search: debouncedSearch || undefined,
       difficulty: difficulty === 'all' ? undefined : difficulty as Difficulty,
       tags: category !== 'all' ? [category] : undefined,
+      isPublished: true,
     }),
   });
 
@@ -73,11 +74,11 @@ export default function CoursesPage() {
   };
 
   const handleSortChange = (value: string) => {
-    const [sortBy, sortOrder] = value.split('-');
+    const [sortBy, sortOrder] = value.split('-') as [string, 'asc' | 'desc'];
     setFilters(prev => ({
       ...prev,
-      sortBy: sortBy as any,
-      sortOrder: sortOrder as 'asc' | 'desc',
+      sortBy,
+      sortOrder,
       page: 1,
     }));
   };
@@ -98,6 +99,23 @@ export default function CoursesPage() {
     rating: course.rating,
     isFeatured: course.isFeatured,
   });
+
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+        <div className="container mx-auto px-4 py-12">
+          <div className="text-center py-12">
+            <p className="text-destructive text-lg mb-4">
+              Une erreur est survenue : {error instanceof Error ? error.message : 'Erreur inconnue'}
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              Réessayer
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
@@ -143,7 +161,10 @@ export default function CoursesPage() {
                 </SelectContent>
               </Select>
 
-              <Select defaultValue="createdAt-desc" onValueChange={handleSortChange}>
+              <Select
+                value={`${filters.sortBy}-${filters.sortOrder}`}
+                onValueChange={handleSortChange}
+              >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Trier par" />
                 </SelectTrigger>
@@ -225,7 +246,12 @@ export default function CoursesPage() {
                   setSearch('');
                   setDifficulty('all');
                   setCategory('all');
-                  setFilters({ page: 1, limit: 12 });
+                  setFilters({
+                    page: 1,
+                    limit: 12,
+                    sortBy: 'createdAt',
+                    sortOrder: 'desc',
+                  });
                 }}>
                   Réinitialiser les filtres
                 </Button>

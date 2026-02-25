@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuthStore } from '@/stores/authStore';
+import { authApi } from '@/lib/api/auth';
 import { usersApi } from '@/lib/api/users';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,31 +26,72 @@ const passwordSchema = z.object({
 
 type PasswordFormData = z.infer<typeof passwordSchema>;
 
+// Schéma pour le profil (si vous voulez le rendre modifiable)
+const profileSchema = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  username: z.string().min(3).max(50).regex(/^[a-zA-Z0-9_]+$/).optional(),
+  bio: z.string().max(500).optional(),
+});
+type ProfileFormData = z.infer<typeof profileSchema>;
+
 export default function DashboardSettingsPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('profile');
 
+  // Formulaire mot de passe
   const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
+    register: registerPassword,
+    handleSubmit: handlePasswordSubmit,
+    reset: resetPassword,
+    formState: { errors: passwordErrors, isSubmitting: isPasswordSubmitting },
   } = useForm<PasswordFormData>({
     resolver: zodResolver(passwordSchema),
   });
 
-  const onSubmit = async (data: PasswordFormData) => {
-    setIsLoading(true);
+  // Formulaire profil (optionnel)
+  const {
+    register: registerProfile,
+    handleSubmit: handleProfileSubmit,
+    formState: { errors: profileErrors, isSubmitting: isProfileSubmitting },
+  } = useForm<ProfileFormData>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+      username: user?.username || '',
+      bio: user?.bio || '',
+    },
+  });
+
+  const onPasswordSubmit = async (data: PasswordFormData) => {
     try {
-      // Appel API à implémenter côté backend
-      await usersApi.updateProfile({ /* ... */ });
-      toast({ title: 'Mot de passe mis à jour' });
-      reset();
-    } catch (error) {
-      toast({ title: 'Erreur', variant: 'destructive' });
-    } finally {
-      setIsLoading(false);
+      await authApi.changePassword({
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword,
+      });
+      toast({ title: 'Mot de passe mis à jour avec succès' });
+      resetPassword();
+    } catch (error: any) {
+      toast({
+        title: 'Erreur',
+        description: error.response?.data?.message || 'Échec de la mise à jour',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const onProfileSubmit = async (data: ProfileFormData) => {
+    try {
+      await usersApi.updateProfile(data);
+      toast({ title: 'Profil mis à jour' });
+    } catch (error: any) {
+      toast({
+        title: 'Erreur',
+        description: error.response?.data?.message || 'Échec de la mise à jour',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -57,7 +99,7 @@ export default function DashboardSettingsPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Paramètres du compte</h1>
 
-      <Tabs defaultValue="profile">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="profile">Profil</TabsTrigger>
           <TabsTrigger value="security">Sécurité</TabsTrigger>
@@ -65,6 +107,7 @@ export default function DashboardSettingsPage() {
           <TabsTrigger value="privacy">Confidentialité</TabsTrigger>
         </TabsList>
 
+        {/* Onglet Profil */}
         <TabsContent value="profile" className="mt-6">
           <Card>
             <CardHeader>
@@ -73,38 +116,63 @@ export default function DashboardSettingsPage() {
                 Ces informations seront visibles par les autres utilisateurs
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nom d'utilisateur</Label>
-                  <Input defaultValue={user?.username} disabled />
+            <CardContent>
+              <form onSubmit={handleProfileSubmit(onProfileSubmit)} className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName">Prénom</Label>
+                    <Input id="firstName" {...registerProfile('firstName')} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName">Nom</Label>
+                    <Input id="lastName" {...registerProfile('lastName')} />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input defaultValue={user?.email} disabled />
+                  <Label htmlFor="username">Nom d'utilisateur</Label>
+                  <Input id="username" {...registerProfile('username')} />
+                  {profileErrors.username && (
+                    <p className="text-sm text-destructive">{profileErrors.username.message}</p>
+                  )}
                 </div>
-              </div>
-              <Button disabled>Enregistrer (bientôt)</Button>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input value={user?.email} disabled />
+                  <p className="text-xs text-muted-foreground">L'email ne peut pas être modifié</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bio">Biographie</Label>
+                  <textarea
+                    id="bio"
+                    className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    {...registerProfile('bio')}
+                  />
+                </div>
+                <Button type="submit" disabled={isProfileSubmitting}>
+                  {isProfileSubmitting ? 'Enregistrement...' : 'Enregistrer'}
+                </Button>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Onglet Sécurité */}
         <TabsContent value="security">
           <Card>
             <CardHeader>
               <CardTitle>Modifier le mot de passe</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <form onSubmit={handlePasswordSubmit(onPasswordSubmit)} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="currentPassword">Mot de passe actuel</Label>
                   <Input
                     id="currentPassword"
                     type="password"
-                    {...register('currentPassword')}
+                    {...registerPassword('currentPassword')}
                   />
-                  {errors.currentPassword && (
-                    <p className="text-sm text-destructive">{errors.currentPassword.message}</p>
+                  {passwordErrors.currentPassword && (
+                    <p className="text-sm text-destructive">{passwordErrors.currentPassword.message}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -112,10 +180,10 @@ export default function DashboardSettingsPage() {
                   <Input
                     id="newPassword"
                     type="password"
-                    {...register('newPassword')}
+                    {...registerPassword('newPassword')}
                   />
-                  {errors.newPassword && (
-                    <p className="text-sm text-destructive">{errors.newPassword.message}</p>
+                  {passwordErrors.newPassword && (
+                    <p className="text-sm text-destructive">{passwordErrors.newPassword.message}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -123,20 +191,42 @@ export default function DashboardSettingsPage() {
                   <Input
                     id="confirmPassword"
                     type="password"
-                    {...register('confirmPassword')}
+                    {...registerPassword('confirmPassword')}
                   />
-                  {errors.confirmPassword && (
-                    <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
+                  {passwordErrors.confirmPassword && (
+                    <p className="text-sm text-destructive">{passwordErrors.confirmPassword.message}</p>
                   )}
                 </div>
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? 'Mise à jour...' : 'Mettre à jour'}
+                <Button type="submit" disabled={isPasswordSubmitting}>
+                  {isPasswordSubmitting ? 'Mise à jour...' : 'Mettre à jour le mot de passe'}
                 </Button>
               </form>
             </CardContent>
           </Card>
         </TabsContent>
-        {/* autres onglets */}
+
+        {/* Autres onglets (notifications, confidentialité) à implémenter plus tard */}
+        <TabsContent value="notifications">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notifications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Configuration des notifications (à venir)</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="privacy">
+          <Card>
+            <CardHeader>
+              <CardTitle>Confidentialité</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Paramètres de confidentialité (à venir)</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );

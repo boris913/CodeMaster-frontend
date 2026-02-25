@@ -28,22 +28,27 @@ const lessonSchema = z.object({
 type LessonFormData = z.infer<typeof lessonSchema>;
 
 export default function EditLessonPage() {
-  const { id } = useParams();
+  const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Déterminer l'ID de la leçon selon la route
+  const lessonId = (params.lessonId as string) || (params.id as string);
+
   const { data: lesson, isLoading } = useQuery({
-    queryKey: ['lesson', id],
-    queryFn: () => lessonsApi.getByIdOrSlug(id as string),
+    queryKey: ['lesson', lessonId],
+    queryFn: () => lessonsApi.getByIdOrSlug(lessonId),
+    enabled: !!lessonId,
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: LessonFormData) => lessonsApi.update(id as string, data),
+    mutationFn: (data: LessonFormData) => lessonsApi.update(lessonId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lesson', id] });
+      queryClient.invalidateQueries({ queryKey: ['lesson', lessonId] });
       toast({ title: 'Leçon mise à jour' });
-      router.push(`/lessons/${id}`);
+      // Retourner à la page de détail de la leçon (route simple ou complète)
+      router.push(`/lessons/${lessonId}`);
     },
   });
 

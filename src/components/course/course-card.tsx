@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { Clock, Users, Star, BookOpen } from 'lucide-react';
 import { cn, formatDuration } from '@/lib/utils';
@@ -49,15 +48,8 @@ export function CourseCard({
   const isCompact = variant === 'compact';
   const isFeatured = variant === 'featured';
 
-  // Fonction pour générer l'URL de la miniature
-  const getThumbnailUrl = (thumbnail?: string) => {
-    if (!thumbnail) return undefined;
-    if (thumbnail.startsWith('http')) return thumbnail;
-    if (thumbnail.startsWith('/')) return `/api/images${thumbnail}`;
-    return `/api/images/${thumbnail}`;
-  };
 
-  const thumbnailUrl = getThumbnailUrl(course.thumbnail);
+  const thumbnailUrl = course.thumbnail;
 
   return (
     <Link href={`/courses/by-slug/${course.slug}`}>
@@ -78,7 +70,7 @@ export function CourseCard({
           )}
         >
           {thumbnailUrl ? (
-            <Image
+            <img
               src={thumbnailUrl}
               alt={course.title}
               fill

@@ -71,6 +71,7 @@ export default function ModuleDetailPage() {
   const {
     data: lessons,
     isLoading: isLoadingLessons,
+    error: lessonsError,
   } = useQuery({
     queryKey: ['lessons', moduleId],
     queryFn: () => lessonsApi.getByModule(moduleId),
@@ -90,7 +91,7 @@ export default function ModuleDetailPage() {
       });
       setIsEditDialogOpen(false);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: 'Erreur',
         description: error.message || 'Impossible de mettre à jour le module',
@@ -110,7 +111,7 @@ export default function ModuleDetailPage() {
       });
       router.push(`/courses/by-id/${courseId}/modules`);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: 'Erreur',
         description: error.message || 'Impossible de supprimer le module',
@@ -142,6 +143,14 @@ export default function ModuleDetailPage() {
     );
   }
 
+  if (lessonsError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>Erreur lors du chargement des leçons.</AlertDescription>
+      </Alert>
+    );
+  }
+  
   if (moduleError || !module) {
     return (
       <div className="container py-10">
@@ -297,18 +306,14 @@ export default function ModuleDetailPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        router.push(`/lessons/${lesson.id}/edit`)
-                      }
+                      onClick={() => router.push(`/courses/by-id/${courseId}/modules/${moduleId}/lessons/${lesson.id}/edit`)}
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        router.push(`/lessons/${lesson.id}`)
-                      }
+                      onClick={() => router.push(`/courses/by-id/${courseId}/modules/${moduleId}/lessons/${lesson.id}`)}
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>

@@ -99,54 +99,7 @@ export default function CreateCoursePage() {
     setThumbnailFile(file);
     setPreviewUrl(URL.createObjectURL(file));
   };
-  
 
-  const onSubmit = async (data: CourseFormData) => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const courseData = {
-        ...data,
-        tags,
-      };
-
-      const response = await coursesApi.create(courseData);
-      
-      toast({
-        title: 'Cours créé avec succès',
-        description: 'Votre cours a été créé et est en attente de publication',
-      });
-
-      // Upload thumbnail si un fichier a été sélectionné
-      if (thumbnailFile) {
-        try {
-          // Note: L'API d'upload de thumbnail doit être implémentée côté backend
-          // await coursesApi.uploadThumbnail(response.id, thumbnailFile);
-        } catch (uploadError) {
-          console.error('Erreur lors de l\'upload de la miniature:', uploadError);
-        }
-      }
-
-      router.push(`/instructor/courses/${response.id}/edit`);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Erreur lors de la création du cours');
-      toast({
-        title: 'Erreur',
-        description: 'Impossible de créer le cours',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Générer le slug automatiquement depuis le titre
   const generateSlug = (title: string) => {
     return title
       .toLowerCase()
@@ -162,6 +115,74 @@ export default function CreateCoursePage() {
     const title = e.target.value;
     const slug = generateSlug(title);
     setValue('slug', slug, { shouldValidate: true });
+  };
+
+  const onSubmit = async (data: CourseFormData) => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    // Vérification optionnelle du rôle (à faire aussi côté backend)
+    if (user.role !== 'INSTRUCTOR' && user.role !== 'ADMIN') {
+      setError('Vous devez être instructeur ou administrateur pour créer un cours');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Convertir les heures en minutes pour le backend
+      const durationInMinutes = data.duration * 60;
+
+      const courseData = {
+        title: data.title,
+        slug: data.slug,
+        description: data.description,
+        shortDescription: data.shortDescription,
+        difficulty: data.difficulty,
+        duration: durationInMinutes,
+        tags,
+      };
+
+      // 1. Créer le cours sans miniature
+      const course = await coursesApi.create(courseData);
+      
+      // 2. Si un fichier miniature a été sélectionné, l'uploader
+      if (thumbnailFile) {
+        try {
+          await coursesApi.uploadThumbnail(course.id, thumbnailFile);
+          toast({
+            title: 'Miniature ajoutée',
+            description: 'La miniature a été téléchargée avec succès',
+          });
+        } catch (uploadError: any) {
+          // On ne bloque pas la création, mais on avertit l'utilisateur
+          toast({
+            title: 'Attention',
+            description: uploadError.message || 'La miniature n\'a pas pu être téléchargée',
+            variant: 'destructive',
+          });
+        }
+      }
+
+      toast({
+        title: 'Cours créé avec succès',
+        description: 'Votre cours a été créé et est en attente de publication',
+      });
+
+      router.push(`/instructor/courses/${course.id}/edit`);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors de la création du cours');
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de créer le cours',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -361,11 +382,13 @@ export default function CreateCoursePage() {
             </CardContent>
           </Card>
 
-            {/* SECTION MINIATURE CORRIGÉE */}
-            <Card>
+          {/* SECTION MINIATURE */}
+          <Card>
             <CardHeader>
               <CardTitle>Miniature du cours</CardTitle>
-              <CardDescription>Une image attractive augmente les inscriptions</CardDescription>
+              <CardDescription>
+                Une image attractive augmente les inscriptions. Vous pourrez l'ajouter après la création.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid md:grid-cols-2 gap-6">
@@ -402,7 +425,6 @@ export default function CreateCoursePage() {
                     </div>
                   </div>
                 )}
-
               </div>
             </CardContent>
           </Card>

@@ -21,9 +21,7 @@ import {
   Save,
   ArrowLeft,
   Video,
-  FileText,
-  Clock,
-  Link
+  FileText
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -61,7 +59,6 @@ export default function CreateLessonPage() {
     register,
     handleSubmit,
     setValue,
-    watch,
     formState: { errors },
   } = useForm<LessonFormData>({
     resolver: zodResolver(lessonSchema),
@@ -84,7 +81,7 @@ export default function CreateLessonPage() {
       });
       router.push(`/courses/by-id/${courseId}/modules/${moduleId}`);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setError(error.message || 'Erreur lors de la création de la leçon');
       toast({
         title: 'Erreur',
@@ -211,7 +208,7 @@ export default function CreateLessonPage() {
                   <Label>Type de contenu</Label>
                   <Select
                     value={videoType}
-                    onValueChange={(value: any) => setVideoType(value)}
+                    onValueChange={(value: 'YOUTUBE' | 'VIMEO' | 'UPLOADED' | 'NONE') => setVideoType(value)}
                     disabled={isLoading}
                   >
                     <SelectTrigger>

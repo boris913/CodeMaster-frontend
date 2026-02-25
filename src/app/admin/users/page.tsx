@@ -37,13 +37,21 @@ export default function AdminUsersPage() {
     },
   });
 
-  const toggleStatusMutation = useMutation({
-    mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
-      usersApi.toggleActiveStatus(userId, isActive),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-    },
-  });
+const toggleStatusMutation = useMutation({
+  mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
+    usersApi.updateRole(userId, { isActive }), // utiliser updateRole avec isActive
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    toast({ title: 'Statut mis à jour' });
+  },
+  onError: (error: any) => {
+    toast({
+      title: 'Erreur',
+      description: error.response?.data?.message || 'Échec de la mise à jour',
+      variant: 'destructive',
+    });
+  },
+});
 
   return (
     <div className="container py-10">

@@ -17,12 +17,13 @@ import {
   Cpu,
   Medal,
   Users,
-  Filter,
   Search,
   Crown,
   TrendingUp,
   Calendar
 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2 } from 'lucide-react';
 
 export default function ExerciseLeaderboardPage() {
   const params = useParams();
@@ -32,13 +33,13 @@ export default function ExerciseLeaderboardPage() {
   const [activeTab, setActiveTab] = useState('performance');
   const [search, setSearch] = useState('');
 
-  const { data: exercise } = useQuery({
+  const { data: exercise, isLoading: isLoadingExercise } = useQuery({
     queryKey: ['exercise', exerciseId],
     queryFn: () => exercisesApi.getById(exerciseId),
     enabled: !!exerciseId,
   });
 
-  const { data: leaderboard, isLoading } = useQuery({
+  const { data: leaderboard, isLoading, isError } = useQuery({
     queryKey: ['leaderboard', exerciseId],
     queryFn: () => exercisesApi.getLeaderboard(exerciseId, 100),
     enabled: !!exerciseId,
@@ -48,16 +49,60 @@ export default function ExerciseLeaderboardPage() {
   const myEntry = leaderboard?.find(entry => entry.userId === user?.id);
 
   const filteredLeaderboard = leaderboard?.filter(entry =>
-    entry.user?.username?.toLowerCase().includes(search.toLowerCase()) ||
-    entry.user?.email?.toLowerCase().includes(search.toLowerCase())
+    entry.username?.toLowerCase().includes(search.toLowerCase())
   ) || [];
 
+  // Calcul des métriques de performance à partir des données réelles
+  const totalEntries = filteredLeaderboard.length;
+  const avgExecutionTime = totalEntries > 0
+    ? Math.round(filteredLeaderboard.reduce((acc, e) => acc + (e.executionTime || 0), 0) / totalEntries)
+    : 0;
+  const avgMemoryUsed = totalEntries > 0
+    ? (filteredLeaderboard.reduce((acc, e) => acc + (e.memoryUsed || 0), 0) / totalEntries / 1024).toFixed(2)
+    : '0';
+  const avgSuccessRate = totalEntries > 0
+    ? Math.round(filteredLeaderboard.reduce((acc, e) => acc + (e.passedTests / e.totalTests * 100), 0) / totalEntries)
+    : 0;
+
   const performanceMetrics = [
-    { label: 'Temps moyen', value: '125ms', icon: Timer },
-    { label: 'Mémoire moyenne', value: '45.2KB', icon: Cpu },
-    { label: 'Taux de réussite', value: '68%', icon: TrendingUp },
-    { label: 'Soumissions totales', value: leaderboard?.length || '0', icon: Users },
+    { label: 'Temps moyen', value: `${avgExecutionTime}ms`, icon: Timer },
+    { label: 'Mémoire moyenne', value: `${avgMemoryUsed} KB`, icon: Cpu },
+    { label: 'Taux de réussite', value: `${avgSuccessRate}%`, icon: TrendingUp },
+    { label: 'Participants', value: totalEntries.toString(), icon: Users },
   ];
+
+  if (isLoadingExercise || isLoading) {
+    return (
+      <div className="container py-10 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="container py-10">
+        <Alert variant="destructive">
+          <AlertDescription>
+            Erreur lors du chargement du classement. Veuillez réessayer.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (!exercise) {
+    return (
+      <div className="container py-10">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Code2 className="h-12 w-12 mx-auto text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-medium">Exercice non trouvé</h3>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container py-10">
@@ -78,7 +123,7 @@ export default function ExerciseLeaderboardPage() {
               Classement
             </h1>
             <p className="text-muted-foreground">
-              {exercise?.title} • Comparez vos performances
+              {exercise.title} • Comparez vos performances
             </p>
           </div>
           <Button onClick={() => router.push(`/exercises/${exerciseId}`)}>
@@ -141,103 +186,95 @@ export default function ExerciseLeaderboardPage() {
                 </TabsList>
 
                 <TabsContent value={activeTab} className="mt-6">
-                  {isLoading ? (
-                    <div className="text-center py-12">
-                      <div className="animate-pulse">Chargement...</div>
+                  <div className="space-y-2">
+                    {/* En-tête */}
+                    <div className="grid grid-cols-12 gap-4 p-3 border-b font-medium text-sm">
+                      <div className="col-span-1">#</div>
+                      <div className="col-span-4">Utilisateur</div>
+                      <div className="col-span-2">Tests</div>
+                      <div className="col-span-2">Temps</div>
+                      <div className="col-span-2">Mémoire</div>
+                      <div className="col-span-1">Date</div>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {/* En-tête */}
-                      <div className="grid grid-cols-12 gap-4 p-3 border-b font-medium text-sm">
-                        <div className="col-span-1">#</div>
-                        <div className="col-span-4">Utilisateur</div>
-                        <div className="col-span-2">Tests</div>
-                        <div className="col-span-2">Temps</div>
-                        <div className="col-span-2">Mémoire</div>
-                        <div className="col-span-1">Date</div>
-                      </div>
 
-                      {/* Entrées */}
-                      {filteredLeaderboard.map((entry, index) => {
-                        const isCurrentUser = entry.userId === user?.id;
-                        return (
-                          <div
-                            key={entry.id}
-                            className={`grid grid-cols-12 gap-4 p-3 rounded-lg items-center hover:bg-accent transition-colors ${
-                              isCurrentUser ? 'bg-primary/5' : ''
-                            }`}
-                          >
-                            <div className="col-span-1">
-                              {index === 0 ? (
-                                <div className="h-8 w-8 rounded-full bg-yellow-500 flex items-center justify-center">
-                                  <Crown className="h-4 w-4 text-white" />
-                                </div>
-                              ) : index === 1 ? (
-                                <div className="h-8 w-8 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
-                                  2
-                                </div>
-                              ) : index === 2 ? (
-                                <div className="h-8 w-8 rounded-full bg-amber-700 flex items-center justify-center text-white font-bold">
-                                  3
-                                </div>
-                              ) : (
-                                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                                  <span className="font-bold">{index + 1}</span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="col-span-4">
-                              <div className="flex items-center gap-2">
-                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                  <span className="font-medium text-sm">
-                                    {entry.user?.username?.slice(0, 2).toUpperCase()}
-                                  </span>
-                                </div>
-                                <div>
-                                  <div className="font-medium">
-                                    {entry.user?.username}
-                                    {isCurrentUser && (
-                                      <Badge variant="outline" className="ml-2 text-xs">Vous</Badge>
-                                    )}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {entry.user?.email}
-                                  </div>
-                                </div>
+                    {/* Entrées */}
+                    {filteredLeaderboard.map((entry, index) => {
+                      const isCurrentUser = entry.userId === user?.id;
+                      return (
+                        <div
+                          key={entry.id}
+                          className={`grid grid-cols-12 gap-4 p-3 rounded-lg items-center hover:bg-accent transition-colors ${
+                            isCurrentUser ? 'bg-primary/5' : ''
+                          }`}
+                        >
+                          <div className="col-span-1">
+                            {index === 0 ? (
+                              <div className="h-8 w-8 rounded-full bg-yellow-500 flex items-center justify-center">
+                                <Crown className="h-4 w-4 text-white" />
                               </div>
-                            </div>
-                            <div className="col-span-2">
-                              <div className="font-medium">
-                                {entry.passedTests}/{entry.totalTests}
+                            ) : index === 1 ? (
+                              <div className="h-8 w-8 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold">
+                                2
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {Math.round(entry.passedTests / entry.totalTests * 100)}%
+                            ) : index === 2 ? (
+                              <div className="h-8 w-8 rounded-full bg-amber-700 flex items-center justify-center text-white font-bold">
+                                3
                               </div>
-                            </div>
-                            <div className="col-span-2">
-                              <div className="flex items-center gap-1">
-                                <Timer className="h-3 w-3" />
-                                <span className="font-medium">{entry.executionTime}ms</span>
+                            ) : (
+                              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                                <span className="font-bold">{index + 1}</span>
                               </div>
-                            </div>
-                            <div className="col-span-2">
-                              <div className="flex items-center gap-1">
-                                <Cpu className="h-3 w-3" />
-                                <span className="font-medium">
-                                  {(entry.memoryUsed / 1024).toFixed(2)} KB
+                            )}
+                          </div>
+                          <div className="col-span-4">
+                            <div className="flex items-center gap-2">
+                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                <span className="font-medium text-sm">
+                                  {entry.username?.slice(0, 2).toUpperCase()}
                                 </span>
                               </div>
-                            </div>
-                            <div className="col-span-1">
-                              <div className="text-xs text-muted-foreground">
-                                {new Date(entry.createdAt).toLocaleDateString('fr-FR')}
+                              <div>
+                                <div className="font-medium">
+                                  {entry.username}
+                                  {isCurrentUser && (
+                                    <Badge variant="outline" className="ml-2 text-xs">Vous</Badge>
+                                  )}
+                                </div>
+                                {/* L'email n'est pas affiché */}
                               </div>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          <div className="col-span-2">
+                            <div className="font-medium">
+                              {entry.passedTests}/{entry.totalTests}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {Math.round((entry.passedTests / entry.totalTests) * 100)}%
+                            </div>
+                          </div>
+                          <div className="col-span-2">
+                            <div className="flex items-center gap-1">
+                              <Timer className="h-3 w-3" />
+                              <span className="font-medium">{entry.executionTime}ms</span>
+                            </div>
+                          </div>
+                          <div className="col-span-2">
+                            <div className="flex items-center gap-1">
+                              <Cpu className="h-3 w-3" />
+                              <span className="font-medium">
+                                {(entry.memoryUsed / 1024).toFixed(2)} KB
+                              </span>
+                            </div>
+                          </div>
+                          <div className="col-span-1">
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(entry.createdAt).toLocaleDateString('fr-FR')}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>

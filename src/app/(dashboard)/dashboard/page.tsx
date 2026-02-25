@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { coursesApi } from '@/lib/api/courses';
 import { authApi } from '@/lib/api/auth';
 import { progressApi } from '@/lib/api/progress';
+import { adminApi } from '@/lib/api/admin';
 import { useAuthStore } from '@/stores/authStore';
 import { 
   BookOpen, 
@@ -56,17 +57,23 @@ export default function DashboardPage() {
 
   const { data: instructorCourses } = useQuery({
     queryKey: ['instructor-courses'],
-    queryFn: () => coursesApi.getByInstructor(user?.id || ''),
+    queryFn: () => coursesApi.getMyCourses(),
     enabled: user?.role === 'INSTRUCTOR' || user?.role === 'ADMIN',
   });
 
   const isAdmin = user?.role === 'ADMIN';
   const isInstructor = user?.role === 'INSTRUCTOR' || isAdmin;
 
+  const { data: adminStats, isLoading: adminStatsLoading } = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: () => adminApi.getStats(),
+    enabled: isAdmin,
+  });
+
   const stats = [
     { 
       label: 'Cours suivis', 
-      value: userProgress?.length || '0', 
+      value: userProgress?.length || 0, 
       icon: BookOpen, 
       change: '+0' 
     },
@@ -78,13 +85,13 @@ export default function DashboardPage() {
     },
     { 
       label: 'Cours terminés', 
-      value: userProgress?.filter(p => p.overallProgress === 100).length || '0', 
+      value: userProgress?.filter(p => p.overallProgress === 100).length || 0, 
       icon: Trophy, 
       change: '+0' 
     },
     { 
       label: 'Score moyen', 
-      value: `${Math.round(userProgress?.reduce((acc, curr) => acc + (curr.averageScore || 0), 0) / (userProgress?.length || 1))}%`, 
+      value: `${userData?.stats?.averageExerciseScore || 0}%`, 
       icon: TrendingUp, 
       change: '+0%' 
     },
@@ -93,19 +100,19 @@ export default function DashboardPage() {
   const instructorStats = [
     {
       label: 'Mes cours',
-      value: instructorCourses?.data.length || '0',
+      value: instructorCourses?.data.length || 0,
       icon: BookOpen,
       link: '/instructor/courses',
     },
     {
       label: 'Total étudiants',
-      value: instructorCourses?.data.reduce((acc, course) => acc + course.totalStudents, 0) || '0',
+      value: instructorCourses?.data.reduce((acc, course) => acc + course.totalStudents, 0) || 0,
       icon: Users,
       link: '/instructor/courses',
     },
     {
       label: 'Cours publiés',
-      value: instructorCourses?.data.filter(c => c.isPublished).length || '0',
+      value: instructorCourses?.data.filter(c => c.isPublished).length || 0,
       icon: Award,
       link: '/instructor/courses',
     },
@@ -253,20 +260,28 @@ export default function DashboardPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <div className="text-2xl font-bold">1,247</div>
-                      <div className="text-sm text-muted-foreground">Utilisateurs actifs</div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-2xl font-bold">156</div>
-                      <div className="text-sm text-muted-foreground">Cours publiés</div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-2xl font-bold">€12,458</div>
-                      <div className="text-sm text-muted-foreground">Revenus ce mois</div>
-                    </div>
-                  </div>
+                  {adminStatsLoading ? (
+                    <div className="py-4 text-center">Chargement...</div>
+                  ) : adminStats ? (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <div className="space-y-2">
+                          <div className="text-2xl font-bold">{adminStats.activeUsers.toLocaleString()}</div>
+                          <div className="text-sm text-muted-foreground">Utilisateurs actifs</div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="text-2xl font-bold">{adminStats.publishedCourses}</div>
+                          <div className="text-sm text-muted-foreground">Cours publiés</div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="text-2xl font-bold">{adminStats.monthlyRevenue.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</div>
+                          <div className="text-sm text-muted-foreground">Revenus ce mois</div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="py-4 text-center text-muted-foreground">Impossible de charger les statistiques</div>
+                  )}
                   <Button className="mt-6 w-full" asChild>
                     <Link href="/admin">
                       <Settings className="mr-2 h-4 w-4" />
@@ -498,24 +513,21 @@ function StudentDashboard({ stats, coursesData, recentActivities }: any) {
                       <Star className="h-4 w-4 text-primary" />
                     </div>
                     <div className="flex-1">
-                      <p className="font-medium">{activity.lesson?.title || activity.course?.title}</p>
+                      <p className="font-medium">{activity.lessonTitle || activity.courseTitle}</p>
                       <p className="text-sm text-muted-foreground">
-                        {activity.type === 'LESSON_COMPLETED' ? 'Leçon complétée' : 
-                         activity.type === 'EXERCISE_SUBMITTED' ? 'Exercice soumis' :
-                         activity.type === 'COURSE_STARTED' ? 'Cours commencé' : 
-                         'Activité'}
+                        {activity.completed ? 'Leçon complétée' : 'En cours'}
                       </p>
                     </div>
                     <div className="text-right">
                       <span className="text-sm">
-                        {new Date(activity.createdAt).toLocaleDateString('fr-FR', {
+                        {new Date(activity.updatedAt).toLocaleDateString('fr-FR', {
                           hour: '2-digit',
                           minute: '2-digit'
                         })}
                       </span>
-                      {activity.progress && (
+                      {activity.completed && (
                         <Badge variant="outline" className="ml-2">
-                          {activity.progress}%
+                          Terminé
                         </Badge>
                       )}
                     </div>

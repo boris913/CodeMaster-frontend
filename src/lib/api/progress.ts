@@ -82,6 +82,27 @@ export interface LessonProgress {
   };
 }
 
+export interface GlobalLeaderboardEntry {
+  rank: number;
+  userId: string;
+  username: string;
+  avatar: string | null;
+  completedLessons: number;
+  streak: number;
+  points: number;
+  lastActivity: string; // ou Date, mais en JSON c'est string
+}
+
+export interface AdminRecentActivity {
+  id: string;
+  userId: string;
+  username: string;
+  userAvatar?: string;
+  type: 'lesson_completed' | 'course_enrolled' | 'exercise_submitted' | 'course_completed';
+  description: string;
+  createdAt: string;
+}
+
 export const progressApi = {
   // Récupérer la progression de l'utilisateur
   getUserProgress: async (courseId?: string): Promise<any[]> => {
@@ -129,6 +150,23 @@ export const progressApi = {
   // Récupérer la progression d'une leçon spécifique
   getLessonProgress: async (lessonId: string): Promise<LessonProgress> => {
     const response = await apiClient.get<LessonProgress>(`/progress/lesson/${lessonId}`);
+    return response.data;
+  },
+
+  getGlobalLeaderboard: async (
+    period?: 'weekly' | 'monthly' | 'all',
+    limit?: number
+  ): Promise<GlobalLeaderboardEntry[]> => {
+    const response = await apiClient.get<GlobalLeaderboardEntry[]>('/progress/leaderboard/global', {
+      params: { period, limit },
+    });
+    return response.data;
+  },
+
+  getAdminRecentActivities: async (limit?: number): Promise<AdminRecentActivity[]> => {
+    const response = await apiClient.get<AdminRecentActivity[]>('/progress/admin/recent-activities', {
+      params: { limit },
+    });
     return response.data;
   },
 };

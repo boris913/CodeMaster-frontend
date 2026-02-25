@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { 
+import {
   BookOpen,
   Trophy,
   Clock,
@@ -26,26 +26,42 @@ import Link from 'next/link';
 export default function CourseProgressPage() {
   const params = useParams();
   const courseId = params.id as string;
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(); // Réactif
 
+  // Récupérer les informations du cours
   const { data: course } = useQuery({
     queryKey: ['course', courseId],
     queryFn: () => coursesApi.getByIdOrSlug(courseId),
     enabled: !!courseId,
   });
 
-  const { data: courseProgress, isLoading } = useQuery({
+  // Récupérer la progression de l'utilisateur dans ce cours
+  const {
+    data: courseProgress,
+    isLoading: isProgressLoading,
+    isError: isProgressError,
+    error: progressError
+  } = useQuery({
     queryKey: ['course-progress', courseId],
     queryFn: () => progressApi.getCourseProgress(courseId),
     enabled: !!courseId && isAuthenticated,
   });
 
+  // Récupérer le classement du cours
   const { data: leaderboard } = useQuery({
     queryKey: ['course-leaderboard', courseId],
     queryFn: () => progressApi.getLeaderboard(courseId),
     enabled: !!courseId,
   });
 
+  // Récupérer l'activité récente (une seule activité)
+  const { data: recentActivities } = useQuery({
+    queryKey: ['recent-activity', courseId],
+    queryFn: () => progressApi.getRecentActivity(1),
+    enabled: !!courseId && isAuthenticated,
+  });
+
+  // Cas non authentifié
   if (!isAuthenticated) {
     return (
       <div className="container py-10">
@@ -59,7 +75,8 @@ export default function CourseProgressPage() {
     );
   }
 
-  if (isLoading) {
+  // Chargement en cours
+  if (isProgressLoading) {
     return (
       <div className="container py-10">
         <div className="animate-pulse">Chargement...</div>
@@ -67,6 +84,27 @@ export default function CourseProgressPage() {
     );
   }
 
+  // Gestion des erreurs de progression
+  if (isProgressError) {
+    return (
+      <div className="container py-10">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-destructive">
+              {progressError?.message === 'Forbidden'
+                ? "Vous n'êtes pas inscrit à ce cours"
+                : "Impossible de charger votre progression"}
+            </p>
+            <Button className="mt-4" asChild>
+              <Link href={`/courses/by-id/${courseId}`}>Voir le cours</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Si le cours ou la progression est introuvable
   if (!course || !courseProgress) {
     return (
       <div className="container py-10">
@@ -80,28 +118,29 @@ export default function CourseProgressPage() {
     );
   }
 
+  // Statistiques affichées dans les cartes du haut
   const stats = [
-    { 
-      label: 'Progression globale', 
-      value: `${courseProgress.overallProgress}%`, 
+    {
+      label: 'Progression globale',
+      value: `${courseProgress.overallProgress}%`,
       icon: TrendingUp,
       color: 'bg-green-500/10 text-green-500'
     },
-    { 
-      label: 'Leçons terminées', 
-      value: `${courseProgress.completedLessons}/${courseProgress.totalLessons}`, 
+    {
+      label: 'Leçons terminées',
+      value: `${courseProgress.completedLessons}/${courseProgress.totalLessons}`,
       icon: CheckCircle2,
       color: 'bg-blue-500/10 text-blue-500'
     },
-    { 
-      label: 'Temps passé', 
-      value: `${Math.floor(courseProgress.totalTimeSpent / 60)}h ${courseProgress.totalTimeSpent % 60}min`, 
+    {
+      label: 'Temps passé',
+      value: `${Math.floor(courseProgress.totalTimeSpent / 60)}h ${courseProgress.totalTimeSpent % 60}min`,
       icon: Clock,
       color: 'bg-purple-500/10 text-purple-500'
     },
-    { 
-      label: 'Classement', 
-      value: leaderboard?.findIndex(entry => entry.userId === useAuthStore.getState().user?.id) + 1 || '-', 
+    {
+      label: 'Classement',
+      value: leaderboard?.findIndex(entry => entry.userId === user?.id) + 1 || '-',
       icon: Award,
       color: 'bg-yellow-500/10 text-yellow-500'
     },
@@ -109,6 +148,7 @@ export default function CourseProgressPage() {
 
   return (
     <div className="container py-10">
+      {/* Fil d'Ariane et en-tête */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
           <Link href={`/courses/by-slug/${course.slug}`} className="text-primary hover:underline">
@@ -133,7 +173,7 @@ export default function CourseProgressPage() {
         </div>
       </div>
 
-      {/* Statistiques */}
+      {/* Cartes statistiques */}
       <div className="grid gap-4 md:grid-cols-4 mb-8">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
@@ -156,7 +196,7 @@ export default function CourseProgressPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-8">
-        {/* Progression par module */}
+        {/* Colonne principale : progression détaillée */}
         <div className="lg:col-span-2">
           <Card>
             <CardHeader>
@@ -179,8 +219,8 @@ export default function CourseProgressPage() {
                       <Badge variant="outline">{module.progress}%</Badge>
                     </div>
                     <Progress value={module.progress} className="h-2" />
-                    
-                    {/* Détails des leçons */}
+
+                    {/* Détails des leçons du module */}
                     <div className="pl-4 space-y-2">
                       {module.lessons?.map((lesson) => (
                         <div key={lesson.id} className="flex items-center justify-between p-2 hover:bg-accent rounded">
@@ -214,7 +254,7 @@ export default function CourseProgressPage() {
           </Card>
         </div>
 
-        {/* Sidebar */}
+        {/* Sidebar droite */}
         <div className="space-y-6">
           {/* Classement */}
           <Card>
@@ -225,31 +265,35 @@ export default function CourseProgressPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {leaderboard?.slice(0, 5).map((entry, index) => (
-                  <div key={entry.userId} className="flex items-center gap-3">
-                    <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold
-                      ${index === 0 ? 'bg-yellow-500/20 text-yellow-700' :
-                        index === 1 ? 'bg-gray-300/20 text-gray-700' :
-                        index === 2 ? 'bg-amber-700/20 text-amber-700' :
-                        'bg-muted text-muted-foreground'}`}>
-                      {index + 1}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium">{entry.user?.username}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {entry.progress}% terminé
+              {leaderboard && leaderboard.length > 0 ? (
+                <div className="space-y-3">
+                  {leaderboard.slice(0, 5).map((entry, index) => (
+                    <div key={entry.userId} className="flex items-center gap-3">
+                      <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold
+                        ${index === 0 ? 'bg-yellow-500/20 text-yellow-700' :
+                          index === 1 ? 'bg-gray-300/20 text-gray-700' :
+                          index === 2 ? 'bg-amber-700/20 text-amber-700' :
+                          'bg-muted text-muted-foreground'}`}>
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium">{entry.user?.username}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {entry.progress}% terminé
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-medium">{entry.completedLessons}/{entry.totalLessons}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(entry.lastActivity).toLocaleDateString('fr-FR')}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-medium">{entry.completedLessons}/{entry.totalLessons}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(entry.lastActivity).toLocaleDateString('fr-FR')}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground py-4">Aucun participant pour le moment</p>
+              )}
               <Button variant="outline" className="w-full mt-4">
                 <Users className="mr-2 h-4 w-4" />
                 Voir le classement complet
@@ -266,22 +310,20 @@ export default function CourseProgressPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {courseProgress.lastActivity ? (
+              {recentActivities?.[0] ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
                       <BookOpen className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <div className="font-medium">
-                        {courseProgress.lastActivity.lessonTitle}
-                      </div>
+                      <div className="font-medium">{recentActivities[0].lessonTitle}</div>
                       <div className="text-xs text-muted-foreground">
-                        {new Date(courseProgress.lastActivity.updatedAt).toLocaleDateString('fr-FR')}
+                        {new Date(recentActivities[0].updatedAt).toLocaleDateString('fr-FR')}
                       </div>
                     </div>
-                    <Badge variant={courseProgress.lastActivity.completed ? 'default' : 'outline'}>
-                      {courseProgress.lastActivity.completed ? 'Terminé' : 'En cours'}
+                    <Badge variant={recentActivities[0].completed ? 'default' : 'outline'}>
+                      {recentActivities[0].completed ? 'Terminé' : 'En cours'}
                     </Badge>
                   </div>
                   <Button variant="outline" className="w-full">
@@ -293,15 +335,17 @@ export default function CourseProgressPage() {
                   <p className="text-sm text-muted-foreground">
                     Aucune activité récente
                   </p>
-                  <Button variant="outline" className="w-full mt-2">
-                    Commencer le cours
+                  <Button variant="outline" className="w-full mt-2" asChild>
+                    <Link href={`/courses/by-id/${courseId}`}>
+                      Commencer le cours
+                    </Link>
                   </Button>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Certificat */}
+          {/* Certificat (affiché seulement si le cours est terminé à 100%) */}
           {courseProgress.overallProgress === 100 && (
             <Card>
               <CardHeader>

@@ -6,8 +6,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import Image from 'next/image';
 import { coursesApi } from '@/lib/api/courses';
-import { modulesApi } from '@/lib/api/modules';
+import { modulesApi, Module } from '@/lib/api/modules';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,9 +27,8 @@ import {
   GripVertical,
   Settings,
   BookOpen,
-  // Clock,
-  Tag
-  // X
+  Tag,
+  Upload
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -57,7 +57,11 @@ export default function EditCoursePage() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('basic');
   const [tags, setTags] = useState<string[]>([]);
-  const [modules, setModules] = useState<any[]>([]);
+  const [modules, setModules] = useState<Module[]>([]);
+
+  // État pour la miniature
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
 
   const { data: course, isLoading: isLoadingCourse } = useQuery({
     queryKey: ['course', courseId],
@@ -72,13 +76,34 @@ export default function EditCoursePage() {
   });
 
   const updateCourseMutation = useMutation({
-    mutationFn: (data: Partial<CourseFormData>) => 
-      coursesApi.update(courseId, data),
+    mutationFn: (data: CourseFormData) => {
+      const { isPublished, isFeatured, ...updateData } = data;
+      return coursesApi.update(courseId, updateData);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['course', courseId] });
       toast({
         title: 'Cours mis à jour',
         description: 'Les modifications ont été enregistrées',
+      });
+    },
+  });
+
+  const deleteCourseMutation = useMutation({
+    mutationFn: () => coursesApi.delete(courseId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      toast({
+        title: 'Cours supprimé',
+        description: 'Le cours a été supprimé avec succès',
+      });
+      router.push('/courses');
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Erreur',
+        description: error.message || 'Impossible de supprimer le cours',
+        variant: 'destructive',
       });
     },
   });
@@ -90,6 +115,26 @@ export default function EditCoursePage() {
       toast({
         title: 'Cours publié',
         description: 'Votre cours est maintenant visible par les étudiants',
+      });
+    },
+  });
+
+  const uploadThumbnailMutation = useMutation({
+    mutationFn: (file: File) => coursesApi.uploadThumbnail(courseId, file),
+    onSuccess: (updatedCourse) => {
+      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
+      toast({
+        title: 'Miniature mise à jour',
+        description: 'La nouvelle miniature a été téléchargée.',
+      });
+      setThumbnailFile(null);
+      setThumbnailPreview(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Erreur',
+        description: error.message || 'Impossible de télécharger la miniature',
+        variant: 'destructive',
       });
     },
   });
@@ -120,6 +165,15 @@ export default function EditCoursePage() {
       setModules(courseModules || []);
     }
   }, [course, courseModules]);
+
+  // Nettoyer l'aperçu de la miniature
+  useEffect(() => {
+    return () => {
+      if (thumbnailPreview) {
+        URL.revokeObjectURL(thumbnailPreview);
+      }
+    };
+  }, [thumbnailPreview]);
 
   const onSubmit = async (data: CourseFormData) => {
     try {
@@ -154,10 +208,10 @@ export default function EditCoursePage() {
 
     setModules(reorderedModules);
 
-    // Mettre à jour l'ordre dans la base de données
     try {
       const moduleIds = reorderedModules.map(module => module.id);
       await modulesApi.reorder(courseId, moduleIds);
+      queryClient.invalidateQueries({ queryKey: ['modules', courseId] });
       toast({
         title: 'Modules réorganisés',
         description: 'L\'ordre des modules a été mis à jour',
@@ -169,6 +223,32 @@ export default function EditCoursePage() {
         variant: 'destructive',
       });
     }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Fichier invalide',
+        description: 'Veuillez sélectionner une image',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'Fichier trop volumineux',
+        description: 'La taille maximale est de 5 MB',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setThumbnailFile(file);
+    setThumbnailPreview(URL.createObjectURL(file));
   };
 
   if (isLoadingCourse) {
@@ -336,24 +416,119 @@ export default function EditCoursePage() {
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
 
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={updateCourseMutation.isPending}>
-                    {updateCourseMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Enregistrement...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="mr-2 h-4 w-4" />
-                        Enregistrer les modifications
-                      </>
+            {/* Section miniature */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Miniature du cours</CardTitle>
+                <CardDescription>
+                  Téléchargez une image d'illustration pour votre cours
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Miniature actuelle */}
+                  <div className="space-y-4">
+                    <Label>Miniature actuelle</Label>
+                    <div className="relative h-40 w-full overflow-hidden rounded-lg border bg-muted">
+                      {course.thumbnail ? (
+                        <img
+                          src={course.thumbnail}
+                          alt={course.title}
+                          fill
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center">
+                          <BookOpen className="h-12 w-12 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Téléchargement nouvelle miniature */}
+                  <div className="space-y-4">
+                    <Label>Nouvelle miniature</Label>
+                    <div
+                      onClick={() => document.getElementById('thumbnail-upload')?.click()}
+                      className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted transition-colors"
+                    >
+                      <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                      <span className="text-sm font-medium">
+                        {thumbnailFile ? thumbnailFile.name : 'Cliquez pour sélectionner'}
+                      </span>
+                      <span className="text-xs text-muted-foreground">PNG, JPG, WebP (max 5 MB)</span>
+                      <input
+                        type="file"
+                        id="thumbnail-upload"
+                        accept="image/*"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                      />
+                    </div>
+
+                    {thumbnailPreview && (
+                      <div className="relative h-24 w-full overflow-hidden rounded-lg border">
+                        <img
+                          src={thumbnailPreview}
+                          alt="Aperçu"
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
                     )}
-                  </Button>
+
+                    {thumbnailFile && (
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => uploadThumbnailMutation.mutate(thumbnailFile)}
+                          disabled={uploadThumbnailMutation.isPending}
+                        >
+                          {uploadThumbnailMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Upload className="h-4 w-4 mr-2" />
+                          )}
+                          Télécharger
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setThumbnailFile(null);
+                            setThumbnailPreview(null);
+                          }}
+                          disabled={uploadThumbnailMutation.isPending}
+                        >
+                          Annuler
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
+            <div className="flex justify-end mt-6">
+              <Button type="submit" disabled={updateCourseMutation.isPending}>
+                {updateCourseMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Enregistrement...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Enregistrer les modifications
+                  </>
+                )}
+              </Button>
+            </div>
           </form>
         </TabsContent>
 
@@ -534,10 +709,12 @@ export default function EditCoursePage() {
                     variant="destructive"
                     onClick={() => {
                       if (confirm('Êtes-vous sûr de vouloir supprimer ce cours ? Cette action est irréversible.')) {
-                        // coursesApi.delete(courseId);
+                        deleteCourseMutation.mutate();
                       }
                     }}
+                    disabled={deleteCourseMutation.isPending}
                   >
+                    {deleteCourseMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Supprimer le cours
                   </Button>
                 </div>

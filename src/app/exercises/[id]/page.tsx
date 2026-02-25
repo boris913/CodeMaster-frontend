@@ -3,13 +3,15 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import ReactMarkdown from 'react-markdown';
 import { exercisesApi } from '@/lib/api/exercises';
 import { CodeEditor } from '@/components/learning/code-editor';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Trophy, Users, TrendingUp } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ArrowLeft, Trophy, Users, TrendingUp, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,24 +22,62 @@ export default function ExerciseDetailPage() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('instructions');
 
-  const { data: exercise, isLoading } = useQuery({
+  const { 
+    data: exercise, 
+    isLoading: isLoadingExercise,
+    isError: isErrorExercise,
+    error: exerciseError 
+  } = useQuery({
     queryKey: ['exercise', id],
     queryFn: () => exercisesApi.getById(id as string),
   });
 
-  const { data: submissions } = useQuery({
+  const { 
+    data: submissions,
+    isLoading: isLoadingSubmissions 
+  } = useQuery({
     queryKey: ['submissions', id],
     queryFn: () => exercisesApi.getSubmissions(id as string, 1, 5),
     enabled: !!user,
   });
 
-  const { data: leaderboard } = useQuery({
+  const { 
+    data: leaderboard,
+    isLoading: isLoadingLeaderboard 
+  } = useQuery({
     queryKey: ['leaderboard', id],
     queryFn: () => exercisesApi.getLeaderboard(id as string, 3),
   });
 
-  if (isLoading) return <div className="container py-10">Chargement...</div>;
-  if (!exercise) return <div className="container py-10">Exercice non trouvé</div>;
+  if (isLoadingExercise) {
+    return (
+      <div className="container py-10 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (isErrorExercise) {
+    return (
+      <div className="container py-10">
+        <Alert variant="destructive">
+          <AlertDescription>
+            {exerciseError instanceof Error ? exerciseError.message : 'Erreur lors du chargement de l\'exercice'}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (!exercise) {
+    return (
+      <div className="container py-10">
+        <Alert>
+          <AlertDescription>Exercice non trouvé</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   const difficultyColor = {
     BEGINNER: 'bg-green-500/10 text-green-700',
@@ -84,18 +124,21 @@ export default function ExerciseDetailPage() {
                   <CardTitle>Instructions</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div
-                    className="prose max-w-none"
-                    dangerouslySetInnerHTML={{ __html: exercise.instructions }}
-                  />
-                  <div className="mt-6 space-y-4">
-                    <h3 className="text-lg font-semibold">Indices</h3>
-                    {exercise.hints?.map((hint, i) => (
-                      <div key={i} className="p-3 bg-muted rounded-lg">
-                        <p className="text-sm">{hint}</p>
-                      </div>
-                    ))}
+                  <div className="prose max-w-none">
+                    <ReactMarkdown>
+                      {exercise.instructions}
+                    </ReactMarkdown>
                   </div>
+                  {exercise.hints && exercise.hints.length > 0 && (
+                    <div className="mt-6 space-y-4">
+                      <h3 className="text-lg font-semibold">Indices</h3>
+                      {exercise.hints.map((hint, i) => (
+                        <div key={i} className="p-3 bg-muted rounded-lg">
+                          <p className="text-sm">{hint}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -105,7 +148,11 @@ export default function ExerciseDetailPage() {
                   <CardTitle>Historique des soumissions</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {submissions?.data.length === 0 ? (
+                  {isLoadingSubmissions ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    </div>
+                  ) : submissions?.data.length === 0 ? (
                     <p className="text-muted-foreground text-center py-8">
                       Aucune soumission pour le moment
                     </p>
@@ -163,19 +210,29 @@ export default function ExerciseDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {leaderboard?.map((entry, i) => (
-                <div key={entry.userId} className="flex items-center justify-between py-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 text-center font-bold text-muted-foreground">
-                      #{i + 1}
-                    </span>
-                    <span>{entry.user?.username}</span>
-                  </div>
-                  <Badge variant="outline">
-                    {entry.passedTests}/{entry.totalTests}
-                  </Badge>
+              {isLoadingLeaderboard ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin" />
                 </div>
-              ))}
+              ) : leaderboard?.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">
+                  Aucun résultat
+                </p>
+              ) : (
+                leaderboard?.map((entry, i) => (
+                  <div key={entry.userId} className="flex items-center justify-between py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 text-center font-bold text-muted-foreground">
+                        #{i + 1}
+                      </span>
+                      <span>{entry.user?.username}</span>
+                    </div>
+                    <Badge variant="outline">
+                      {entry.passedTests}/{entry.totalTests}
+                    </Badge>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 

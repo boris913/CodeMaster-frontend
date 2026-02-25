@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -33,28 +33,35 @@ export default function ProfilePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  const { data: profileData, isLoading: loadingProfile } = useQuery({
-    queryKey: ['user', 'me'],
-    queryFn: () => authApi.me(),
-  });
 
   const {
     register,
     handleSubmit,
     formState: { errors },
+    reset,
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
-    defaultValues: {
-      firstName: profileData?.firstName || '',
-      lastName: profileData?.lastName || '',
-      username: profileData?.username || '',
-      bio: profileData?.bio || '',
-    },
   });
+
+  const { data: profileData, isLoading: loadingProfile, isError } = useQuery({
+    queryKey: ['user', 'me'],
+    queryFn: () => authApi.me(),
+  });
+
+  // Réinitialiser le formulaire quand les données sont chargées
+  useEffect(() => {
+    if (profileData) {
+      reset({
+        firstName: profileData.firstName || '',
+        lastName: profileData.lastName || '',
+        username: profileData.username || '',
+        bio: profileData.bio || '',
+      });
+    }
+  }, [profileData, reset]);
 
   const updateProfileMutation = useMutation({
     mutationFn: (data: ProfileFormData) => usersApi.updateProfile(data),
@@ -146,10 +153,27 @@ export default function ProfilePage() {
     }
   };
 
+  if (!isAuthenticated) {
+    router.push('/login');
+    return null;
+  }
+
   if (loadingProfile) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="container py-10">
+        <Alert variant="destructive">
+          <AlertDescription>
+            Impossible de charger votre profil. Veuillez réessayer.
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }

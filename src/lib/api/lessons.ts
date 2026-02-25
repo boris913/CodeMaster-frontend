@@ -29,6 +29,7 @@ export interface Lesson {
     title: string;
     language: string;
     difficulty: string;
+    points: number;
   };
   _count?: {
     comments: number;
@@ -108,8 +109,8 @@ export const lessonsApi = {
   },
 
   // Marquer une leçon comme terminée
-  markAsCompleted: async (lessonId: string): Promise<LessonProgress> => {
-    const response = await apiClient.post<LessonProgress>(`/lessons/${lessonId}/complete`);
+  markAsCompleted: async (lessonId: string, timeSpent?: number): Promise<LessonProgress> => {
+    const response = await apiClient.post<LessonProgress>(`/lessons/${lessonId}/complete`, { timeSpent });
     return response.data;
   },
 

@@ -86,6 +86,24 @@ export interface Course {
   updatedAt: string;
 }
 
+export interface CourseEnrollment {
+  id: string;
+  userId: string;
+  user?: {
+    id: string;
+    username: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    avatar?: string;
+    lastLogin?: string;
+  };
+  progress: number;
+  completed: boolean;
+  completedAt?: string;
+  enrolledAt: string;
+}
+
 export interface Enrollment {
   id: string;
   userId: string;
@@ -200,8 +218,8 @@ export const coursesApi = {
   },
 
   // Récupérer les inscriptions d'un cours (instructeur/admin seulement)
-  getEnrollments: async (courseId: string): Promise<Enrollment[]> => {
-    const response = await apiClient.get<Enrollment[]>(`/courses/${courseId}/enrollments`);
+  getEnrollments: async (courseId: string): Promise<CourseEnrollment[]> => {
+    const response = await apiClient.get<CourseEnrollment[]>(`/courses/${courseId}/enrollments`);
     return response.data;
   },
 
@@ -240,5 +258,17 @@ export const coursesApi = {
   // Supprimer un cours
   delete: async (courseId: string): Promise<void> => {
     await apiClient.delete(`/courses/${courseId}`);
+  },
+
+  uploadThumbnail: async (courseId: string, file: File): Promise<Course> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await apiClient.patch<Course>(`/courses/${courseId}/thumbnail`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
   },
 };

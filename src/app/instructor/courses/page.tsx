@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Plus, 
   Eye, 
@@ -19,22 +20,33 @@ import {
   BookOpen,
   Clock,
   Search,
-  Filter
+  Loader2
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Link from 'next/link';
 
 export default function InstructorCoursesPage() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const [activeTab, setActiveTab] = useState('published');
+  const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
 
-  const { data: courses, isLoading } = useQuery({
-    queryKey: ['instructor-courses', activeTab, statusFilter, search],
-    queryFn: () => coursesApi.getByInstructor(user?.id || '', {
+  // Vérification du rôle
+  if (user?.role !== 'INSTRUCTOR' && user?.role !== 'ADMIN') {
+    return (
+      <div className="container py-10">
+        <Alert variant="destructive">
+          <AlertDescription>
+            Vous n'avez pas les droits pour accéder à cette page.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  const { data: courses, isLoading, isError } = useQuery({
+    queryKey: ['instructor-courses', activeTab, search],
+    queryFn: () => coursesApi.getMyCourses({
       isPublished: activeTab === 'published' ? true : activeTab === 'drafts' ? false : undefined,
       search: search || undefined,
     }),
@@ -47,6 +59,26 @@ export default function InstructorCoursesPage() {
     drafts: courses?.data.filter(c => !c.isPublished).length || 0,
     students: courses?.data.reduce((acc, course) => acc + course.totalStudents, 0) || 0,
   };
+
+  if (isLoading) {
+    return (
+      <div className="container py-10 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="container py-10">
+        <Alert variant="destructive">
+          <AlertDescription>
+            Erreur lors du chargement des cours. Veuillez réessayer.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="container py-10">
@@ -140,17 +172,7 @@ export default function InstructorCoursesPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Statut" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous les statuts</SelectItem>
-                <SelectItem value="published">Publiés</SelectItem>
-                <SelectItem value="drafts">Brouillons</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Suppression du select redondant */}
           </div>
         </CardContent>
       </Card>
@@ -164,11 +186,7 @@ export default function InstructorCoursesPage() {
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-6">
-          {isLoading ? (
-            <div className="text-center py-12">
-              <div className="animate-pulse">Chargement...</div>
-            </div>
-          ) : courses?.data.length === 0 ? (
+          {courses?.data.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <BookOpen className="h-12 w-12 mx-auto text-muted-foreground" />
@@ -217,7 +235,7 @@ export default function InstructorCoursesPage() {
                             <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                               <div className="flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
-                                <span>{course.duration} heures</span>
+                                <span>{Math.floor(course.duration / 60)}h {course.duration % 60}min</span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <Users className="h-3 w-3" />

@@ -6,7 +6,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
 import { coursesApi } from '@/lib/api/courses';
-import { progressApi } from '@/lib/api/progress';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,12 +55,6 @@ export default function CourseDetailPage() {
     queryKey: ['user-enrollments'],
     queryFn: () => coursesApi.getEnrolled(),
     enabled: isAuthenticated,
-  });
-
-  const { data: courseProgress } = useQuery({
-    queryKey: ['course-progress', course?.id],
-    queryFn: () => progressApi.getCourseProgress(course?.id!),
-    enabled: !!course && isAuthenticated,
   });
 
   const enrollMutation = useMutation({
@@ -200,7 +193,7 @@ export default function CourseDetailPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
-                    <span>{course.duration} heures</span>
+                    <span>{Math.floor(course.duration / 60)}h {course.duration % 60}min</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Users className="h-4 w-4" />
@@ -228,7 +221,7 @@ export default function CourseDetailPage() {
                 {course.thumbnail && (
                   <div className="relative h-48 overflow-hidden rounded-t-lg">
                     <Image
-                      src={course.thumbnail.startsWith('http') ? course.thumbnail : `/api/images${course.thumbnail}`}
+                      src={course.thumbnail}
                       alt={course.title}
                       fill
                       className="object-cover"
@@ -280,8 +273,8 @@ export default function CourseDetailPage() {
                     <Button
                       className="flex-1"
                       size="lg"
-                      onClick={handleEnroll}
-                      disabled={isEnrolled || enrollMutation.isPending}
+                      onClick={isEnrolled ? () => router.push(`/learn/${course.id}/start`) : handleEnroll}
+                      disabled={enrollMutation.isPending}
                     >
                       {isEnrolled ? (
                         <>
