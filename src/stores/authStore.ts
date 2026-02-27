@@ -3,17 +3,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authApi, type LoginCredentials, type RegisterData, type UserProfile } from '@/lib/api/auth';
+import Cookies from 'js-cookie';
+import { jwtDecode } from 'jwt-decode';
 
 interface AuthStore {
-  // État
   user: UserProfile | null;
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  
-  // Actions
+
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
@@ -27,7 +27,6 @@ interface AuthStore {
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
-      // État initial
       user: null,
       accessToken: null,
       refreshToken: null,
@@ -35,13 +34,15 @@ export const useAuthStore = create<AuthStore>()(
       isLoading: false,
       error: null,
 
-      // Connexion
       login: async (credentials) => {
         set({ isLoading: true, error: null });
         try {
           const response = await authApi.login(credentials);
-          
-          // Stocker les tokens
+
+          // Décoder le token pour obtenir le rôle immédiatement
+          const decoded: any = jwtDecode(response.accessToken);
+          const userRole = decoded.role; // selon le payload de votre JWT
+
           set({
             accessToken: response.accessToken,
             refreshToken: response.refreshToken,
@@ -49,14 +50,26 @@ export const useAuthStore = create<AuthStore>()(
             isLoading: false,
           });
 
-          // Stocker dans localStorage pour l'intercepteur axios
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('accessToken', response.accessToken);
-            localStorage.setItem('refreshToken', response.refreshToken);
-          }
+          // localStorage pour l'intercepteur axios
+          localStorage.setItem('accessToken', response.accessToken);
+          localStorage.setItem('refreshToken', response.refreshToken);
 
-          // Charger le profil utilisateur
-          await get().loadUser();
+          // Cookies pour le middleware
+          Cookies.set('accessToken', response.accessToken, {
+            expires: 7,
+            path: '/',
+            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production',
+          });
+          Cookies.set('userRole', userRole, {
+            expires: 7,
+            path: '/',
+            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production',
+          });
+
+          // Charger le profil complet en arrière-plan (ne bloque pas la redirection)
+          get().loadUser().catch(console.error);
         } catch (error: any) {
           set({
             error: error.response?.data?.message || 'Échec de la connexion',
@@ -66,12 +79,14 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      // Inscription
       register: async (data) => {
         set({ isLoading: true, error: null });
         try {
           const response = await authApi.register(data);
-          
+
+          const decoded: any = jwtDecode(response.accessToken);
+          const userRole = decoded.role;
+
           set({
             accessToken: response.accessToken,
             refreshToken: response.refreshToken,
@@ -79,13 +94,23 @@ export const useAuthStore = create<AuthStore>()(
             isLoading: false,
           });
 
-          // Stocker dans localStorage
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('accessToken', response.accessToken);
-            localStorage.setItem('refreshToken', response.refreshToken);
-          }
+          localStorage.setItem('accessToken', response.accessToken);
+          localStorage.setItem('refreshToken', response.refreshToken);
 
-          await get().loadUser();
+          Cookies.set('accessToken', response.accessToken, {
+            expires: 7,
+            path: '/',
+            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production',
+          });
+          Cookies.set('userRole', userRole, {
+            expires: 7,
+            path: '/',
+            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production',
+          });
+
+          get().loadUser().catch(console.error);
         } catch (error: any) {
           set({
             error: error.response?.data?.message || 'Échec de l\'inscription',
@@ -95,10 +120,9 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      // Déconnexion
       logout: async () => {
         const { refreshToken } = get();
-        
+
         if (refreshToken) {
           try {
             await authApi.logout(refreshToken);
@@ -107,7 +131,6 @@ export const useAuthStore = create<AuthStore>()(
           }
         }
 
-        // Nettoyer l'état
         set({
           user: null,
           accessToken: null,
@@ -115,45 +138,72 @@ export const useAuthStore = create<AuthStore>()(
           isAuthenticated: false,
         });
 
-        // Nettoyer le localStorage
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-        }
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+
+        Cookies.remove('accessToken', { path: '/' });
+        Cookies.remove('userRole', { path: '/' });
       },
 
-      // Effacer les erreurs
       clearError: () => set({ error: null }),
 
-      // Définir les tokens
       setTokens: (accessToken, refreshToken) => {
         set({ accessToken, refreshToken });
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('accessToken', accessToken);
-          localStorage.setItem('refreshToken', refreshToken);
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+
+        Cookies.set('accessToken', accessToken, {
+          expires: 7,
+          path: '/',
+          sameSite: 'strict',
+          secure: process.env.NODE_ENV === 'production',
+        });
+
+        // Optionnel : décoder et définir le rôle si disponible
+        try {
+          const decoded: any = jwtDecode(accessToken);
+          if (decoded.role) {
+            Cookies.set('userRole', decoded.role, {
+              expires: 7,
+              path: '/',
+              sameSite: 'strict',
+              secure: process.env.NODE_ENV === 'production',
+            });
+          }
+        } catch {
+          // ignorer
         }
       },
 
-      // Effacer les tokens
       clearTokens: () => {
         set({ accessToken: null, refreshToken: null });
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-        }
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+
+        Cookies.remove('accessToken', { path: '/' });
+        Cookies.remove('userRole', { path: '/' });
       },
 
       loadUser: async () => {
         try {
           const user = await authApi.me();
           set({ user, isAuthenticated: true });
+
+          // Mettre à jour le cookie userRole (au cas où le rôle aurait changé)
+          Cookies.set('userRole', user.role, {
+            expires: 7,
+            path: '/',
+            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production',
+          });
         } catch (error) {
           console.error('Session expirée ou invalide');
           set({ user: null, isAuthenticated: false });
+          Cookies.remove('accessToken', { path: '/' });
+          Cookies.remove('userRole', { path: '/' });
         }
       },
 
-      // Définir l'utilisateur
       setUser: (user) => set({ user }),
     }),
     {

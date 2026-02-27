@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import Editor from '@monaco-editor/react';
+import Editor, { type OnMount } from '@monaco-editor/react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Play, RotateCcw, Download, Copy, Eye, EyeOff, Check, CheckCircle2, XCircle, Terminal } from 'lucide-react';
+import { Play, RotateCcw, Download, Copy, Eye, EyeOff, Check, CheckCircle2, XCircle, Terminal, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type * as Monaco from 'monaco-editor';
 
 interface TestResult {
   name?: string;
@@ -15,7 +16,8 @@ interface TestResult {
   error?: string;
 }
 
-interface ExecutionResult {
+// FIX 1: export → LearningPage peut maintenant faire `import { type ExecutionResult } from '@/components/learning/code-editor'`
+export interface ExecutionResult {
   success: boolean;
   output: string;
   testResults?: TestResult[];
@@ -32,6 +34,8 @@ interface CodeEditorProps {
   readOnly?: boolean;
   height?: string;
   showConsole?: boolean;
+  // FIX 2: isLoading permet au parent de bloquer le bouton pendant une soumission async
+  isLoading?: boolean;
 }
 
 export function CodeEditor({
@@ -40,7 +44,8 @@ export function CodeEditor({
   onRun,
   readOnly = false,
   height = '400px',
-  showConsole = true
+  showConsole = true,
+  isLoading = false,
 }: CodeEditorProps) {
   const [code, setCode] = useState(defaultValue);
   const [output, setOutput] = useState('');
@@ -56,11 +61,16 @@ export function CodeEditor({
   const [copied, setCopied] = useState(false);
   const [showOutput, setShowOutput] = useState(true);
   const { theme } = useTheme();
-  const editorRef = useRef(null);
 
-  const handleEditorDidMount = (editor: any) => {
+  // FIX 3: typer editorRef avec l'interface Monaco correcte → élimine l'erreur "'trigger' does not exist on type 'never'"
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+
+  const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
   };
+
+  // isRunning (local) OU isLoading (prop parent) bloquent le bouton
+  const busy = isRunning || isLoading;
 
   const handleRun = async () => {
     if (!onRun) return;
@@ -73,15 +83,14 @@ export function CodeEditor({
 
     try {
       const result = await onRun(code);
-      
-      // CORRECTION: Parser et afficher les résultats des tests
+
       setIsSuccess(result.success);
       setOutput(result.output || '');
-      
+
       if (result.testResults && result.testResults.length > 0) {
         setTestResults(result.testResults);
       }
-      
+
       if (result.passedTests !== undefined && result.totalTests !== undefined) {
         setExecutionStats({
           passedTests: result.passedTests,
@@ -129,7 +138,7 @@ export function CodeEditor({
       python: 'Python',
       html: 'HTML',
       css: 'CSS',
-      java: 'Java'
+      java: 'Java',
     };
     return labels[language] || language;
   };
@@ -140,43 +149,28 @@ export function CodeEditor({
       <div className="flex items-center justify-between rounded-t-lg border border-b-0 bg-muted/50 p-3">
         <div className="flex items-center gap-4">
           <Badge variant="secondary">{getLanguageLabel()}</Badge>
-          <span className="text-sm text-muted-foreground">
-            {code.length} caractères
-          </span>
+          <span className="text-sm text-muted-foreground">{code.length} caractères</span>
         </div>
         <div className="flex items-center gap-2">
           {!readOnly && (
             <>
-              <Button
-                size="sm"
-                onClick={handleRun}
-                disabled={isRunning}
-                className="gap-2"
-              >
-                <Play className="h-4 w-4" />
-                {isRunning ? 'Exécution...' : 'Exécuter'}
+              <Button size="sm" onClick={handleRun} disabled={busy} className="gap-2">
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {busy ? 'Exécution...' : 'Exécuter'}
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleReset}
-              >
+              <Button size="sm" variant="outline" onClick={handleReset} disabled={busy}>
                 <RotateCcw className="h-4 w-4" />
               </Button>
             </>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleCopy}
-          >
+          <Button size="sm" variant="outline" onClick={handleCopy}>
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleDownload}
-          >
+          <Button size="sm" variant="outline" onClick={handleDownload}>
             <Download className="h-4 w-4" />
           </Button>
         </div>
@@ -200,7 +194,7 @@ export function CodeEditor({
             automaticLayout: true,
             formatOnPaste: true,
             formatOnType: true,
-            suggest: { showWords: false, showSnippets: false }
+            suggest: { showWords: false, showSnippets: false },
           }}
         />
       </div>
@@ -218,16 +212,8 @@ export function CodeEditor({
                 </Badge>
               )}
             </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowOutput(!showOutput)}
-            >
-              {showOutput ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
+            <Button size="sm" variant="ghost" onClick={() => setShowOutput(!showOutput)}>
+              {showOutput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </Button>
           </div>
 
@@ -263,7 +249,9 @@ export function CodeEditor({
                       key={index}
                       className={cn(
                         'flex items-start gap-3 rounded-lg border p-3',
-                        test.passed ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950' : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950'
+                        test.passed
+                          ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950'
+                          : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950',
                       )}
                     >
                       {test.passed ? (
@@ -272,13 +260,9 @@ export function CodeEditor({
                         <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium">
-                          {test.name || `Test ${index + 1}`}
-                        </div>
+                        <div className="font-medium">{test.name || `Test ${index + 1}`}</div>
                         {test.error && (
-                          <div className="mt-1 text-sm text-muted-foreground">
-                            {test.error}
-                          </div>
+                          <div className="mt-1 text-sm text-muted-foreground">{test.error}</div>
                         )}
                       </div>
                       <Badge variant={test.passed ? 'default' : 'destructive'}>
@@ -301,9 +285,7 @@ export function CodeEditor({
                     {executionStats.executionTime !== undefined && (
                       <div className="rounded-lg border p-4">
                         <div className="text-sm text-muted-foreground">Temps d'exécution</div>
-                        <div className="text-2xl font-bold">
-                          {executionStats.executionTime} ms
-                        </div>
+                        <div className="text-2xl font-bold">{executionStats.executionTime} ms</div>
                       </div>
                     )}
                     {executionStats.memoryUsed !== undefined && (
@@ -317,7 +299,9 @@ export function CodeEditor({
                     <div className="rounded-lg border p-4">
                       <div className="text-sm text-muted-foreground">Taux de réussite</div>
                       <div className="text-2xl font-bold">
-                        {Math.round((executionStats.passedTests / executionStats.totalTests) * 100)}%
+                        {Math.round(
+                          (executionStats.passedTests / executionStats.totalTests) * 100,
+                        )}%
                       </div>
                     </div>
                   </div>
@@ -339,7 +323,8 @@ export function CodeEditor({
               size="sm"
               variant="ghost"
               onClick={() => {
-                editorRef.current?.trigger('keyboard', 'editor.action.formatDocument');
+                // FIX 3: editorRef est maintenant IStandaloneCodeEditor → .trigger() existe
+                editorRef.current?.trigger('keyboard', 'editor.action.formatDocument', null);
               }}
             >
               Formater

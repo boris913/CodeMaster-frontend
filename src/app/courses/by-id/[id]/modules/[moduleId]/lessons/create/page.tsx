@@ -16,12 +16,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
+import {
   Loader2,
   Save,
   ArrowLeft,
   Video,
-  FileText
+  FileText,
+  Code2,
+  CheckCircle2,
+  ChevronRight,
+  SkipForward,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -43,11 +47,12 @@ export default function CreateLessonPage() {
   const moduleId = params.moduleId as string;
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Initialisation à 'NONE' au lieu de '' pour éviter l'erreur Radix
   const [videoType, setVideoType] = useState<'YOUTUBE' | 'VIMEO' | 'UPLOADED' | 'NONE'>('NONE');
+  // Après création : stocker l'ID pour l'étape 2
+  const [createdLessonId, setCreatedLessonId] = useState<string | null>(null);
 
   const { data: module, isLoading: isLoadingModule } = useQuery({
     queryKey: ['module', moduleId],
@@ -70,16 +75,15 @@ export default function CreateLessonPage() {
   });
 
   const createLessonMutation = useMutation({
-    mutationFn: (data: LessonFormData) =>
-      lessonsApi.create(moduleId, data),
-    onSuccess: () => {
+    mutationFn: (data: LessonFormData) => lessonsApi.create(moduleId, data),
+    onSuccess: (lesson) => {
       queryClient.invalidateQueries({ queryKey: ['modules', courseId] });
       queryClient.invalidateQueries({ queryKey: ['module', moduleId] });
       toast({
-        title: 'Leçon créée',
-        description: 'La leçon a été créée avec succès',
+        title: 'Leçon créée ✓',
+        description: 'Souhaitez-vous ajouter un exercice de code ?',
       });
-      router.push(`/courses/by-id/${courseId}/modules/${moduleId}`);
+      setCreatedLessonId(lesson.id);
     },
     onError: (error: Error) => {
       setError(error.message || 'Erreur lors de la création de la leçon');
@@ -94,34 +98,99 @@ export default function CreateLessonPage() {
   const onSubmit = async (data: LessonFormData) => {
     setIsLoading(true);
     setError(null);
-  
     try {
-      // On prépare le payload
       const payload = {
         ...data,
-        // Si c'est NONE, on envoie undefined (ou null selon ton API)
         videoType: videoType === 'NONE' ? undefined : videoType,
       };
-  
-      // On supprime videoUrl si on n'a pas de vidéo
-      if (videoType === 'NONE') {
-        delete payload.videoUrl;
-      }
-  
+      if (videoType === 'NONE') delete payload.videoUrl;
       await createLessonMutation.mutateAsync(payload as any);
-    } catch (err) {
+    } catch {
       // Erreur gérée dans la mutation
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ─── ÉTAPE 2 : Leçon créée → choix de la suite ───────────────────────────
+  if (createdLessonId) {
+    return (
+      <div className="container max-w-xl py-20 flex flex-col items-center gap-10 text-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+            <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">Leçon créée avec succès !</h2>
+            <p className="text-muted-foreground mt-2">
+              Voulez-vous ajouter un exercice de code interactif à cette leçon ?
+            </p>
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4 w-full">
+          <button
+            onClick={() =>
+              router.push(
+                `/courses/by-id/${courseId}/modules/${moduleId}/lessons/${createdLessonId}/exercise/create`,
+              )
+            }
+            className="group flex flex-col items-start gap-3 p-5 rounded-xl border-2
+                       border-primary/40 bg-primary/5 hover:bg-primary/10 hover:border-primary
+                       transition-all cursor-pointer"
+          >
+            <div className="h-10 w-10 rounded-lg bg-primary/10 group-hover:bg-primary/20
+                            flex items-center justify-center transition-colors">
+              <Code2 className="h-5 w-5 text-primary" />
+            </div>
+            <div className="text-left">
+              <p className="font-semibold">Créer un exercice</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Défi de code interactif avec tests automatiques
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-primary self-end mt-auto" />
+          </button>
+
+          <button
+            onClick={() =>
+              router.push(
+                `/courses/by-id/${courseId}/modules/${moduleId}/lessons/${createdLessonId}`,
+              )
+            }
+            className="group flex flex-col items-start gap-3 p-5 rounded-xl border-2
+                       border-border bg-muted/20 hover:bg-muted/40 transition-all cursor-pointer"
+          >
+            <div className="h-10 w-10 rounded-lg bg-muted group-hover:bg-muted/80
+                            flex items-center justify-center transition-colors">
+              <SkipForward className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="text-left">
+              <p className="font-semibold">Passer cette étape</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Ajout possible plus tard depuis la page de la leçon
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground self-end mt-auto" />
+          </button>
+        </div>
+
+        <Button
+          variant="link"
+          className="text-muted-foreground"
+          onClick={() => router.push(`/courses/by-id/${courseId}/modules/${moduleId}`)}
+        >
+          Retour au module
+        </Button>
+      </div>
+    );
+  }
+
+  // ─── ÉTAPE 1 : Formulaire ─────────────────────────────────────────────────
   if (isLoadingModule) {
     return (
-      <div className="container py-10">
-        <div className="flex justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
+      <div className="container py-10 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
@@ -130,9 +199,7 @@ export default function CreateLessonPage() {
     return (
       <div className="container py-10">
         <Alert>
-          <AlertDescription>
-            Module non trouvé
-          </AlertDescription>
+          <AlertDescription>Module non trouvé</AlertDescription>
         </Alert>
       </div>
     );
@@ -155,9 +222,7 @@ export default function CreateLessonPage() {
           <FileText className="h-8 w-8" />
           Nouvelle leçon
         </h1>
-        <p className="text-muted-foreground">
-          Module: {module.title}
-        </p>
+        <p className="text-muted-foreground">Module: {module.title}</p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)}>
@@ -171,9 +236,7 @@ export default function CreateLessonPage() {
           <Card>
             <CardHeader>
               <CardTitle>Informations de base</CardTitle>
-              <CardDescription>
-                Définissez les détails de votre leçon
-              </CardDescription>
+              <CardDescription>Définissez les détails de votre leçon</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -208,7 +271,9 @@ export default function CreateLessonPage() {
                   <Label>Type de contenu</Label>
                   <Select
                     value={videoType}
-                    onValueChange={(value: 'YOUTUBE' | 'VIMEO' | 'UPLOADED' | 'NONE') => setVideoType(value)}
+                    onValueChange={(value: 'YOUTUBE' | 'VIMEO' | 'UPLOADED' | 'NONE') =>
+                      setVideoType(value)
+                    }
                     disabled={isLoading}
                   >
                     <SelectTrigger>
@@ -233,7 +298,6 @@ export default function CreateLessonPage() {
                           Vidéo téléchargée
                         </div>
                       </SelectItem>
-                      {/* Changement de "" vers "NONE" ici */}
                       <SelectItem value="NONE">
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4" />
@@ -245,7 +309,6 @@ export default function CreateLessonPage() {
                 </div>
               </div>
 
-              {/* Condition mise à jour pour exclure 'NONE' */}
               {videoType !== 'NONE' && (
                 <div className="space-y-2">
                   <Label htmlFor="videoUrl">
@@ -257,11 +320,11 @@ export default function CreateLessonPage() {
                   <Input
                     id="videoUrl"
                     placeholder={
-                      videoType === 'YOUTUBE' 
-                        ? 'https://www.youtube.com/watch?v=...' 
+                      videoType === 'YOUTUBE'
+                        ? 'https://www.youtube.com/watch?v=...'
                         : videoType === 'VIMEO'
-                        ? 'https://vimeo.com/...'
-                        : 'https://votre-domaine.com/video.mp4'
+                          ? 'https://vimeo.com/...'
+                          : 'https://votre-domaine.com/video.mp4'
                     }
                     {...register('videoUrl')}
                     disabled={isLoading}
@@ -291,9 +354,7 @@ export default function CreateLessonPage() {
           <Card>
             <CardHeader>
               <CardTitle>Contenu de la leçon</CardTitle>
-              <CardDescription>
-                Rédigez le contenu détaillé de votre leçon
-              </CardDescription>
+              <CardDescription>Rédigez le contenu détaillé de votre leçon</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -312,6 +373,17 @@ export default function CreateLessonPage() {
             </CardContent>
           </Card>
 
+          {/* Annonce de l'étape suivante */}
+          <Card className="border-dashed border-primary/30 bg-primary/5">
+            <CardContent className="py-4 flex items-center gap-3">
+              <Code2 className="h-5 w-5 text-primary/60 shrink-0" />
+              <p className="text-sm text-muted-foreground">
+                Après la création, vous pourrez ajouter un{' '}
+                <strong className="text-foreground">exercice de code interactif</strong> en option.
+              </p>
+            </CardContent>
+          </Card>
+
           <div className="flex justify-between">
             <Button
               type="button"
@@ -325,12 +397,12 @@ export default function CreateLessonPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
+                onClick={() =>
                   toast({
                     title: 'Brouillon sauvegardé',
                     description: 'Votre leçon a été sauvegardée localement',
-                  });
-                }}
+                  })
+                }
                 disabled={isLoading}
               >
                 Sauvegarder comme brouillon
