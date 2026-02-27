@@ -1,6 +1,11 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, {
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
+  InternalAxiosRequestConfig,
+} from 'axios';
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   data: T;
   meta?: {
     total: number;
@@ -10,19 +15,37 @@ export interface ApiResponse<T = any> {
   };
 }
 
+// Interface pour les callbacks du store (évite l'import circulaire)
+interface TokenCallbacks {
+  onRefreshSuccess: (accessToken: string) => void;
+  onRefreshFailure: () => void;
+}
+
 class ApiClient {
   private client: AxiosInstance;
   private static instance: ApiClient;
   private isRefreshing = false;
-  private failedQueue: any[] = [];
+  private failedQueue: Array<{
+    resolve: (token: string) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+
+  // ✅ L'accessToken est stocké EN MÉMOIRE uniquement (plus de localStorage)
+  private accessToken: string | null = null;
+
+  // Callbacks injectés depuis le authStore pour éviter l'import circulaire
+  private callbacks: TokenCallbacks | null = null;
 
   private constructor() {
     this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
+      // ✅ Assure-toi que NEXT_PUBLIC_API_URL = http://localhost:5000/api/v1
+      baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1',
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
       },
+      // ✅ CRITIQUE : envoie automatiquement le cookie httpOnly au backend
+      withCredentials: true,
     });
 
     this.setupInterceptors();
@@ -35,11 +58,32 @@ class ApiClient {
     return ApiClient.instance;
   }
 
-  private processQueue(error: any, token: string | null = null) {
+  /**
+   * Permet au authStore d'injecter ses callbacks une seule fois au démarrage.
+   * Évite l'import circulaire ApiClient ↔ authStore.
+   */
+  public registerCallbacks(callbacks: TokenCallbacks): void {
+    this.callbacks = callbacks;
+  }
+
+  // ✅ Méthodes publiques pour gérer l'accessToken en mémoire
+  public setAccessToken(token: string): void {
+    this.accessToken = token;
+  }
+
+  public clearAccessToken(): void {
+    this.accessToken = null;
+  }
+
+  public getAccessToken(): string | null {
+    return this.accessToken;
+  }
+
+  private processQueue(error: unknown, token: string | null = null): void {
     this.failedQueue.forEach((prom) => {
       if (error) {
         prom.reject(error);
-      } else {
+      } else if (token) {
         prom.resolve(token);
       }
     });
@@ -47,62 +91,73 @@ class ApiClient {
   }
 
   private setupInterceptors(): void {
-    // Request interceptor
+    // ✅ Request interceptor — injecte l'accessToken depuis la mémoire
     this.client.interceptors.request.use(
-      (config) => {
-        const token = this.getAccessToken();
-        if (token && config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
+      (config: InternalAxiosRequestConfig) => {
+        if (this.accessToken && config.headers) {
+          config.headers.Authorization = `Bearer ${this.accessToken}`;
         }
         return config;
       },
-      (error) => Promise.reject(error)
+      (error: unknown) => Promise.reject(error)
     );
 
-    // Response interceptor avec logique de Queue
+    // ✅ Response interceptor — gère le refresh via cookie httpOnly
     this.client.interceptors.response.use(
       (response) => response,
-      async (error) => {
-        const originalRequest = error.config;
+      async (error: unknown) => {
+        if (!axios.isAxiosError(error)) return Promise.reject(error);
+
+        const originalRequest = error.config as InternalAxiosRequestConfig & {
+          _retry?: boolean;
+        };
 
         if (error.response?.status === 401 && !originalRequest._retry) {
+          // Si un refresh est déjà en cours, on met la requête en file d'attente
           if (this.isRefreshing) {
-            // Si un refresh est déjà en cours, on met la requête en attente
-            return new Promise((resolve, reject) => {
+            return new Promise<string>((resolve, reject) => {
               this.failedQueue.push({ resolve, reject });
-            })
-              .then((token) => {
+            }).then((token) => {
+              if (originalRequest.headers) {
                 originalRequest.headers.Authorization = `Bearer ${token}`;
-                return this.client(originalRequest);
-              })
-              .catch((err) => Promise.reject(err));
+              }
+              return this.client(originalRequest);
+            });
           }
 
           originalRequest._retry = true;
           this.isRefreshing = true;
 
           try {
-            const refreshToken = this.getRefreshToken();
-            if (!refreshToken) throw new Error('No refresh token available');
+            // ✅ Le refreshToken vient du cookie httpOnly automatiquement
+            // grâce à withCredentials: true — on n'envoie rien dans le body
+            const { data } = await axios.post<{ accessToken: string }>(
+              `${this.client.defaults.baseURL}/auth/refresh`,
+              {}, // Body vide
+              { withCredentials: true }
+            );
 
-            // Appel direct à l'API de refresh via axios pour éviter les boucles
-            const { data } = await axios.post(`${this.client.defaults.baseURL}/auth/refresh`, {
-              refreshToken,
-            });
+            const { accessToken } = data;
 
-            const { accessToken, refreshToken: newRefreshToken } = data;
-            
-            this.setTokens(accessToken, newRefreshToken);
-            
-            // On traite la file d'attente avec le nouveau token
+            // ✅ Stocker le nouveau token en mémoire
+            this.accessToken = accessToken;
+
+            // ✅ Informer le authStore du nouveau token
+            this.callbacks?.onRefreshSuccess(accessToken);
+
             this.processQueue(null, accessToken);
 
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+            }
             return this.client(originalRequest);
           } catch (refreshError) {
             this.processQueue(refreshError, null);
-            this.clearTokens();
-            
+            this.accessToken = null;
+
+            // ✅ Informer le authStore de la déconnexion
+            this.callbacks?.onRefreshFailure();
+
             if (typeof window !== 'undefined') {
               window.location.href = '/login';
             }
@@ -117,62 +172,33 @@ class ApiClient {
     );
   }
 
-  private getAccessToken(): string | null {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('accessToken');
-    }
-    return null;
-  }
+  // ── Méthodes HTTP ──────────────────────────────────────────────────────────
 
-  private getRefreshToken(): string | null {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('refreshToken');
-    }
-    return null;
-  }
-
-  private setTokens(accessToken: string, refreshToken: string): void {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
-    }
-  }
-
-  private clearTokens(): void {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-    }
-  }
-
-  async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  async get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.get<T>(url, config);
   }
 
-  async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  async post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.post<T>(url, data, config);
   }
 
-  async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  async put<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.put<T>(url, data, config);
   }
 
-  async patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  async patch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.patch<T>(url, data, config);
   }
 
-  async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  async delete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.delete<T>(url, config);
   }
 
   async uploadFile(url: string, file: File, fieldName = 'file'): Promise<AxiosResponse> {
     const formData = new FormData();
     formData.append(fieldName, file);
-
     return this.client.post(url, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
   }
 }

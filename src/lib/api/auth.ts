@@ -13,9 +13,9 @@ export interface RegisterData {
   lastName?: string;
 }
 
+// ✅ Plus de refreshToken dans le body (cookie httpOnly)
 export interface AuthResponse {
   accessToken: string;
-  refreshToken: string;
   tokenType: string;
   expiresIn: number;
 }
@@ -47,11 +47,20 @@ export interface ChangePasswordData {
   newPassword: string;
 }
 
+// ✅ Interfaces pour les retours typés explicitement
+interface VerifyTokenResponse {
+  message: string;
+}
+
+interface CheckAvailabilityResponse {
+  available: boolean;
+}
+
 export const authApi = {
-  // Authentification
+
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     const response = await apiClient.post<AuthResponse>('/auth/login', credentials);
-    return response.data; // Retourne directement response.data
+    return response.data;
   },
 
   register: async (data: RegisterData): Promise<AuthResponse> => {
@@ -59,21 +68,23 @@ export const authApi = {
     return response.data;
   },
 
-  logout: async (refreshToken: string): Promise<void> => {
-    await apiClient.post('/auth/logout', { refreshToken });
+  // ✅ Plus de refreshToken dans le body — le cookie est envoyé automatiquement
+  logout: async (): Promise<void> => {
+    await apiClient.post('/auth/logout');
   },
 
-  refreshToken: async (refreshToken: string): Promise<AuthResponse> => {
-    const response = await apiClient.post<AuthResponse>('/auth/refresh', { refreshToken });
+  // ✅ Refresh via cookie httpOnly — body vide
+  refreshToken: async (): Promise<AuthResponse> => {
+    const response = await apiClient.post<AuthResponse>('/auth/refresh', {});
     return response.data;
   },
 
-  verifyToken: async (): Promise<{ message: string }> => {
-    const response = await apiClient.get('/auth/verify');
+  // ✅ Type explicite <VerifyTokenResponse> pour corriger l'erreur ligne 74
+  verifyToken: async (): Promise<VerifyTokenResponse> => {
+    const response = await apiClient.get<VerifyTokenResponse>('/auth/verify');
     return response.data;
   },
 
-  // Mot de passe oublié
   forgotPassword: async (email: string): Promise<void> => {
     await apiClient.post('/auth/forgot-password', { email });
   },
@@ -82,21 +93,23 @@ export const authApi = {
     await apiClient.post('/auth/reset-password', data);
   },
 
-  // Profil utilisateur
   me: async (): Promise<UserProfile> => {
     const response = await apiClient.get<UserProfile>('/auth/me');
     return response.data;
   },
 
-  // Vérifier si l'email est disponible
-  checkEmail: async (email: string): Promise<{ available: boolean }> => {
-    const response = await apiClient.get(`/users/check-email?email=${email}`);
+  // ✅ Type explicite <CheckAvailabilityResponse> pour corriger les erreurs lignes 95 et 101
+  checkEmail: async (email: string): Promise<CheckAvailabilityResponse> => {
+    const response = await apiClient.get<CheckAvailabilityResponse>(
+      `/users/check-email?email=${email}`
+    );
     return response.data;
   },
 
-  // Vérifier si le nom d'utilisateur est disponible
-  checkUsername: async (username: string): Promise<{ available: boolean }> => {
-    const response = await apiClient.get(`/users/check-username?username=${username}`);
+  checkUsername: async (username: string): Promise<CheckAvailabilityResponse> => {
+    const response = await apiClient.get<CheckAvailabilityResponse>(
+      `/users/check-username?username=${username}`
+    );
     return response.data;
   },
 

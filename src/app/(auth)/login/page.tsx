@@ -35,9 +35,14 @@ export default function LoginPage() {
     clearError();
     try {
       await login(data);
-      router.push('/dashboard');
-    } catch (error) {
-      // Error is handled by the store
+      
+      // ✅ Rediriger vers la destination mémorisée ou /dashboard par défaut
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get('redirect') || '/dashboard';
+      router.push(redirect);
+      
+    } catch {
+      // Error gérée dans le store
     }
   };
 

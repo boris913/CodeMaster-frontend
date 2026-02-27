@@ -2,56 +2,21 @@
 
 import { useEffect } from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import Cookies from 'js-cookie';
-import { jwtDecode } from 'jwt-decode';
 
+/**
+ * Composant monté une seule fois dans le layout racine.
+ * Son seul rôle : charger le profil utilisateur si la session
+ * est restaurée mais que le profil n'est pas encore disponible.
+ */
 export function AuthInitializer() {
-  const { loadUser, isAuthenticated, setTokens, setUser } = useAuthStore();
+  const { isAuthenticated, user, loadUser } = useAuthStore();
 
   useEffect(() => {
-    const initAuth = async () => {
-      const accessToken = Cookies.get('accessToken') || localStorage.getItem('accessToken');
-      const refreshToken = localStorage.getItem('refreshToken');
-
-      if (accessToken && !isAuthenticated) {
-        // Restaurer les tokens dans le store
-        if (refreshToken) {
-          setTokens(accessToken, refreshToken);
-        }
-
-        // Essayer de charger l'utilisateur
-        try {
-          await loadUser();
-        } catch (error) {
-          // Si le chargement échoue, nettoyer
-          Cookies.remove('accessToken', { path: '/' });
-          Cookies.remove('userRole', { path: '/' });
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-        }
-      } else if (accessToken && isAuthenticated) {
-        // Déjà authentifié, mais on peut mettre à jour le cookie userRole si absent
-        const userRole = Cookies.get('userRole');
-        if (!userRole) {
-          try {
-            const decoded: any = jwtDecode(accessToken);
-            if (decoded.role) {
-              Cookies.set('userRole', decoded.role, {
-                expires: 7,
-                path: '/',
-                sameSite: 'strict',
-                secure: process.env.NODE_ENV === 'production',
-              });
-            }
-          } catch {
-            // ignorer
-          }
-        }
-      }
-    };
-
-    initAuth();
-  }, [loadUser, isAuthenticated, setTokens, setUser]);
+    // Si on est authentifié (token restauré) mais sans profil → charger le profil
+    if (isAuthenticated && !user) {
+      loadUser().catch(console.error);
+    }
+  }, [isAuthenticated, user, loadUser]);
 
   return null;
 }
